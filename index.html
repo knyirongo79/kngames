@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KNGames — Play Something Great</title>
+<meta name="description" content="Discover and download PC games from KNGames.">
+<style>
+:root {
+  --bg: #090d16;
+  --panel: #121a29;
+  --panel2: #1a2537;
+  --text: #f4f7ff;
+  --muted: #a8b3c7;
+  --accent: #6c7cff;
+  --accent2: #9b65ff;
+  --border: #29354a;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: Arial, Helvetica, sans-serif;
+}
+a { color: inherit; text-decoration: none; }
+button, input, select { font: inherit; }
+header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(9,13,22,.94);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--border);
+}
+.nav {
+  max-width: 1200px;
+  margin: auto;
+  padding: 16px 22px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+.logo { font-size: 25px; font-weight: 900; letter-spacing: -1px; }
+.logo span { color: var(--accent); }
+.navlinks { display: flex; gap: 22px; align-items: center; }
+.navlinks a { color: var(--muted); font-size: 14px; }
+.navlinks a:hover { color: white; }
+.hero {
+  max-width: 1200px;
+  margin: auto;
+  padding: 65px 22px 45px;
+}
+.eyebrow {
+  color: #a9b4ff;
+  font-size: 12px;
+  font-weight: bold;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+.hero h1 {
+  max-width: 760px;
+  margin: 14px 0;
+  font-size: clamp(38px, 7vw, 76px);
+  line-height: 1.02;
+  letter-spacing: -3px;
+}
+.gradient {
+  background: linear-gradient(90deg,#7f8aff,#bd82ff);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.hero p { max-width: 650px; color: var(--muted); line-height: 1.7; }
+.hero-actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:25px; }
+.btn {
+  display:inline-flex;
+  justify-content:center;
+  align-items:center;
+  padding:13px 19px;
+  border:0;
+  border-radius:10px;
+  background:var(--accent);
+  color:white;
+  font-weight:bold;
+  cursor:pointer;
+}
+.btn:hover { filter:brightness(1.12); }
+.btn.secondary { background:var(--panel2); border:1px solid var(--border); }
+.stats {
+  display:flex; gap:28px; flex-wrap:wrap;
+  margin-top:34px; color:var(--muted); font-size:13px;
+}
+.stats strong { color:white; }
+main { max-width:1200px; margin:auto; padding:0 22px 65px; }
+.section-heading {
+  display:flex; align-items:end; justify-content:space-between;
+  gap:15px; margin:20px 0;
+}
+.section-heading h2 { margin:0; font-size:28px; }
+.section-heading p { margin:7px 0 0; color:var(--muted); font-size:14px; }
+.controls {
+  display:grid; grid-template-columns:1fr 200px; gap:12px;
+  margin:22px 0;
+}
+.controls input, .controls select {
+  width:100%; min-width:0; padding:14px;
+  color:var(--text); background:var(--panel);
+  border:1px solid var(--border); border-radius:10px;
+}
+.grid {
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:20px;
+}
+.game {
+  overflow:hidden; background:var(--panel);
+  border:1px solid var(--border); border-radius:15px;
+  transition:transform .2s,border-color .2s;
+}
+.game:hover { transform:translateY(-4px); border-color:#5969a0; }
+.cover {
+  min-height:175px; display:flex; align-items:center; justify-content:center;
+  padding:20px; text-align:center;
+  background:radial-gradient(ellipse at top,#36416e,#171e31 65%,#121a29);
+}
+.cover .cover-title {
+  font-size:clamp(24px,3vw,35px); font-weight:900;
+  letter-spacing:-1px; overflow-wrap:anywhere;
+}
+.cover .cover-title span { color:#a9b4ff; }
+.game-body { padding:18px; }
+.game-meta {
+  display:flex; flex-wrap:wrap; gap:8px; align-items:center;
+  color:var(--muted); font-size:12px;
+}
+.tag {
+  padding:5px 8px; border-radius:6px;
+  background:#252f48; color:#c5ceff;
+}
+.game h3 { margin:13px 0 8px; font-size:21px; }
+.game p {
+  min-height:62px; color:var(--muted);
+  line-height:1.55; font-size:14px;
+}
+.game-footer {
+  display:flex; align-items:center; justify-content:space-between;
+  gap:10px; margin-top:18px;
+}
+.status { color:#a7e8c2; font-size:12px; }
+.download { padding:10px 13px; font-size:13px; }
+.empty {
+  grid-column:1/-1; padding:35px; text-align:center;
+  border:1px dashed var(--border); border-radius:12px; color:var(--muted);
+}
+.info {
+  margin-top:45px; padding:25px;
+  background:var(--panel); border:1px solid var(--border); border-radius:15px;
+}
+.info h2 { margin-top:0; }
+.info p { color:var(--muted); line-height:1.7; }
+footer {
+  border-top:1px solid var(--border); color:var(--muted);
+  padding:25px 22px; text-align:center; font-size:13px;
+}
+@media(max-width:850px) {
+  .grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+}
+@media(max-width:560px) {
+  .nav { padding:14px 16px; }
+  .logo { font-size:22px; }
+  .navlinks { gap:12px; }
+  .navlinks a { font-size:12px; }
+  .hero { padding:45px 17px 30px; }
+  .hero h1 { letter-spacing:-1.5px; }
+  main { padding:0 17px 45px; }
+  .grid { grid-template-columns:1fr; }
+  .controls { grid-template-columns:1fr; }
+  .section-heading h2 { font-size:24px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <nav class="nav">
+    <a class="logo" href="#">KN<span>Games</span></a>
+    <div class="navlinks">
+      <a href="#games">Games</a>
+      <a href="#about">About</a>
+    </div>
+  </nav>
+</header>
+
+<section class="hero">
+  <div class="eyebrow">Your next game starts here</div>
+  <h1>Discover games.<br><span class="gradient">Play your way.</span></h1>
+  <p>
+    Welcome to KNGames, a home for PC games made and published by us.
+    Explore the collection, find a game you like, and download it.
+  </p>
+  <div class="hero-actions">
+    <a class="btn" href="#games">Explore games ↓</a>
+    <a class="btn secondary" href="#about">About KNGames</a>
+  </div>
+  <div class="stats">
+    <span><strong id="game-count">1</strong> listed game</span>
+    <span><strong>PC</strong> games</span>
+    <span><strong>Mobile-friendly</strong> website</span>
+  </div>
+</section>
+
+<main>
+  <section id="games">
+    <div class="section-heading">
+      <div>
+        <h2>Game library</h2>
+        <p>Search the collection or filter by genre.</p>
+      </div>
+    </div>
+
+    <div class="controls">
+      <input id="search" type="search" placeholder="Search games..." aria-label="Search games">
+      <select id="genre" aria-label="Filter by genre">
+        <option value="all">All genres</option>
+        <option value="Fighting">Fighting</option>
+        <option value="Action">Action</option>
+        <option value="Adventure">Adventure</option>
+        <option value="Racing">Racing</option>
+        <option value="Sports">Sports</option>
+        <option value="Other">Other</option>
+      </select>
+    </div>
+
+    <div class="grid" id="game-grid"></div>
+  </section>
+
+  <section class="info" id="about">
+    <h2>About KNGames</h2>
+    <p>
+      KNGames is a game library for discovering and downloading PC games.
+      Games are published by the site owner. Visitors can browse the library,
+      search for titles and download published games, but cannot upload games.
+    </p>
+    <p>
+      Only download game files you trust. Check that a downloaded file comes
+      from the official game publisher before running it.
+    </p>
+  </section>
+</main>
+
+<footer>
+  © <span id="year"></span> KNGames. All rights reserved.
+</footer>
+
+<script>
+/*
+  KNGAMES GAME CATALOGUE
+
+  To publish a game:
+  1. Upload your game's ZIP or installer to GitHub Releases.
+  2. Copy the direct download link.
+  3. Add a new entry to the games array below.
+  4. Commit and push this index.html to your GitHub website repository.
+
+  Never add private passwords or secret API keys to this file.
+*/
+const games = [
+  {
+    id: "fighter-5",
+    title: "Fighter 5",
+    genre: "Fighting",
+    platform: "Windows PC",
+    description: "Enter the arena in Fighter 5, a fighting game project. Add your latest features and build before publishing the download.",
+    version: "Coming soon",
+    downloadUrl: "",
+    featured: true
+  }
+
+  /*
+  EXAMPLE: add another game by placing a comma after the previous entry,
+  then adding an object like this:
+
+  ,{
+    id: "my-new-game",
+    title: "My New Game",
+    genre: "Action",
+    platform: "Windows PC",
+    description: "Write the real description of your game here.",
+    version: "1.0",
+    downloadUrl: "PASTE_YOUR_GITHUB_RELEASE_ASSET_LINK_HERE",
+    featured: false
+  }
+  */
+];
+
+const grid = document.getElementById("game-grid");
+const search = document.getElementById("search");
+const genre = document.getElementById("genre");
+
+function escapeHTML(value) {
+  return String(value).replace(/[&<>"']/g, char => ({
+    "&":"&amp;", "<":"&lt;", ">":"&gt;",
+    '"':"&quot;", "'":"&#39;"
+  })[char]);
+}
+
+function renderGames() {
+  const query = search.value.trim().toLowerCase();
+  const selectedGenre = genre.value;
+
+  const filtered = games.filter(game => {
+    const matchesText =
+      (game.title + " " + game.description + " " + game.genre)
+      .toLowerCase().includes(query);
+    const matchesGenre =
+      selectedGenre === "all" || game.genre === selectedGenre;
+    return matchesText && matchesGenre;
+  });
+
+  document.getElementById("game-count").textContent = games.length;
+
+  if (!filtered.length) {
+    grid.innerHTML = '<div class="empty">No games found. Try another search or genre.</div>';
+    return;
+  }
+
+  grid.innerHTML = filtered.map(game => {
+    const available = /^https:\/\/(github\.com|objects\.githubusercontent\.com)\//i
+      .test(game.downloadUrl);
+
+    const downloadButton = available
+      ? `<a class="btn download" href="${escapeHTML(game.downloadUrl)}" target="_blank" rel="noopener noreferrer">Download ↓</a>`
+      : `<button class="btn download" disabled title="The owner has not published a download yet" style="opacity:.55;cursor:not-allowed">Coming soon</button>`;
+
+    return `
+      <article class="game">
+        <div class="cover">
+          <div class="cover-title">${escapeHTML(game.title.split(" ")[0])}
+            <span>${escapeHTML(game.title.split(" ").slice(1).join(" "))}</span>
+          </div>
+        </div>
+        <div class="game-body">
+          <div class="game-meta">
+            <span class="tag">${escapeHTML(game.genre)}</span>
+            <span>${escapeHTML(game.platform)}</span>
+          </div>
+          <h3>${escapeHTML(game.title)}</h3>
+          <p>${escapeHTML(game.description)}</p>
+          <div class="game-footer">
+            <span class="status">${escapeHTML(game.version)}</span>
+            ${downloadButton}
+          </div>
+        </div>
+      </article>`;
+  }).join("");
+}
+
+search.addEventListener("input", renderGames);
+genre.addEventListener("change", renderGames);
+document.getElementById("year").textContent = new Date().getFullYear();
+renderGames();
+</script>
+</body>
+</html>
