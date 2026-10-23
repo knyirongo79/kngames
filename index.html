@@ -1,0 +1,1362 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#070a14">
+<meta name="description" content="FIGHTER 5 — original browser wrestling game for PC and mobile.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FIGHTER 5">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<title>FIGHTER 5 — Mobile Wrestling Game</title>
+<style>
+  :root{color-scheme:dark;--gold:#ffce55;--red:#f04452;--cyan:#46e4ef;--ink:#070a14}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;width:100%;height:100%;background:#050711;font-family:Impact,'Arial Narrow',system-ui,sans-serif;color:#fff;overflow:hidden;overscroll-behavior:none;touch-action:none;user-select:none;-webkit-user-select:none}
+  body{display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at 50% 12%,#25264b 0,#0c1022 48%,#03040a 100%)}
+  #gameWrap{position:relative;width:min(100vw,160dvh);max-width:1280px;aspect-ratio:16/10;max-height:100dvh;box-shadow:0 0 60px #000;border:1px solid #3c4164;background:#070a14;overflow:hidden;flex:none}
+  canvas{display:block;width:100%;height:100%;touch-action:none;outline:none}
+  #gameWrap:fullscreen,#gameWrap:-webkit-full-screen{width:100vw;height:100dvh;max-width:none;max-height:none;aspect-ratio:auto;border:0;box-shadow:none;background:#070a14}
+  #gameWrap:fullscreen canvas,#gameWrap:-webkit-full-screen canvas{width:100%;height:100%}
+  .corner{display:none;position:absolute;bottom:8px;right:12px;color:#8b91ad;font:10px Arial,sans-serif;letter-spacing:1px;pointer-events:none;text-shadow:0 1px 4px black}
+  /* Landscape on phones fills the entire screen so the touch controls are easier to reach. */
+  @media (orientation:landscape){
+    body.touch-device #gameWrap{width:100vw;height:100dvh;max-width:none;max-height:none;aspect-ratio:auto;border:0;box-shadow:none}
+  }
+  @media (orientation:landscape) and (pointer:coarse){
+    #gameWrap{width:100vw;height:100dvh;max-width:none;max-height:none;aspect-ratio:auto;border:0;box-shadow:none}
+    .corner{display:none}
+  }
+  /* The game's ring and touch buttons are designed for landscape. Keep their proportions intact in portrait. */
+  @media (orientation:portrait){
+    body.touch-device #gameWrap{width:min(100vw,160dvh);aspect-ratio:16/10;max-height:none;border:0;box-shadow:none}
+    body.touch-device #rotateNotice{display:flex}
+  }
+  @media (orientation:portrait) and (pointer:coarse){
+    #gameWrap{width:min(100vw,160dvh);aspect-ratio:16/10;max-height:none;border:0;box-shadow:none}
+    #rotateNotice{display:flex}
+  }
+  #rotateNotice{display:none;position:fixed;inset:0;z-index:99;align-items:center;justify-content:center;padding:24px;background:radial-gradient(ellipse at 50% 15%,#283056 0,#101426 52%,#050711 100%);text-align:center}
+  .rotate-card{width:min(92vw,440px);padding:26px 24px;border:1px solid #526085;border-radius:22px;background:rgba(8,12,27,.95);box-shadow:0 18px 70px #0009}
+  .rotate-symbol{font:64px/1 system-ui,sans-serif;color:#ffce55;margin-bottom:14px}
+  .rotate-card h1{margin:0 0 12px;font:900 clamp(25px,7vw,36px)/1.05 Impact,'Arial Narrow',sans-serif;letter-spacing:1px}
+  .rotate-card p{margin:0;color:#cdd5ef;font:16px/1.5 system-ui,sans-serif}
+  .rotate-card small{display:block;margin-top:18px;color:#8d9abd;font:12px/1.45 system-ui,sans-serif}
+</style>
+</head>
+<body>
+<div id="gameWrap"><canvas id="game" width="1280" height="800" aria-label="Fighter 5 wrestling game"></canvas><div class="corner">FIGHTER 5 • ARENA CLASH</div></div>
+<div id="rotateNotice" role="status" aria-live="polite"><div class="rotate-card"><div class="rotate-symbol">↻</div><h1>ROTATE YOUR PHONE</h1><p>FIGHTER 5 plays best in landscape. Turn your phone sideways to see the full ring.</p><small>To use touch buttons, open OPTIONS → TOUCHSCREEN CONTROLS in Settings.</small></div></div>
+<script>
+(() => {
+'use strict';
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+const W=1280,H=800;
+const roster=[
+ {name:'EL DRAGON',rating:91,sub:'THE HIGH-FLYER',skin:'#a96b45',gear:'#ec343c',trim:'#ffd35c',hair:'#19141a',style:'speed',power:0.83},
+ {name:'HOMESTAR',rating:91,sub:'THE PEOPLE’S HERO',skin:'#bd8359',gear:'#2484ed',trim:'#f4f6ff',hair:'#35251d',style:'balanced',power:0.88},
+ {name:'BIG LAO',rating:92,sub:'THE HEAVY HITTER',skin:'#87563e',gear:'#e2b53a',trim:'#fff1a8',hair:'#141319',style:'power',power:1.16},
+ {name:'CLUCS',rating:91,sub:'THE TECHNICIAN',skin:'#dfa47a',gear:'#36b987',trim:'#d8fff0',hair:'#4c3425',style:'technical',power:0.93},
+ {name:'MR CLOWN',rating:91,sub:'THE CHAOS MAKER',skin:'#edc1a4',gear:'#9e42d7',trim:'#f9edff',hair:'#e8483c',style:'tricky',power:0.9},
+ {name:'WONTU',rating:92,sub:'THE IRON WALL',skin:'#6b4235',gear:'#ef742f',trim:'#ffe0b0',hair:'#12121a',style:'tank',power:1.08}
+];
+// Six additional fictional showcase wrestlers matching the reference panel's names and varied gear. Ratings follow the requested 75–90 range.
+roster.push(
+ {name:'KONRAD BLAZE',rating:90,sub:'THE REDLINE ACE',skin:'#744a38',gear:'#171a24',trim:'#f2b52f',hair:'#151217',hairStyle:2,gearStyle:4,style:'power',power:.98},
+ {name:'ACE RYDER',rating:88,sub:'THE BLUE COMET',skin:'#b87957',gear:'#1867c8',trim:'#f2f5ff',hair:'#2a201b',hairStyle:1,gearStyle:2,style:'speed',power:.91},
+ {name:'CHASE VALOR',rating:90,sub:'THE GOLDEN STANDARD',skin:'#d19b78',gear:'#20232d',trim:'#f2f2f4',hair:'#9a754f',hairStyle:5,gearStyle:1,style:'balanced',power:.96},
+ {name:'SKY LYNX',rating:86,sub:'THE SKYLINE STAR',skin:'#c98967',gear:'#9e2948',trim:'#ffcf62',hair:'#17121b',hairStyle:6,gearStyle:3,style:'technical',power:.88},
+ {name:'DARIUS STONE',rating:89,sub:'THE BLACKTOP KING',skin:'#a66d4d',gear:'#24232a',trim:'#b4c1d0',hair:'#201816',hairStyle:3,gearStyle:0,style:'tank',power:.97},
+ {name:'TITAN FORCE',rating:90,sub:'THE GREEN MACHINE',skin:'#70472f',gear:'#25533a',trim:'#b4e04f',hair:'#111217',hairStyle:0,gearStyle:5,style:'power',power:1.0}
+);
+// Original women's division: fictional names, ratings capped at 90, and individual gear/hair palettes.
+const womenRoster=[
+ ['VERA VORTEX','#bd8359','#b5224d','#ffe5aa','#24162e'],['LUNA STORM','#d9ad91','#275ac4','#d6f4ff','#362b36'],['JETT RAIN','#80543e','#20252f','#ffbd4a','#16141c'],['SCARLET FURY','#c78e70','#ad2638','#ffca78','#2a1720'],
+ ['IVY IRON','#d2a185','#37764f','#d0ffc9','#47362a'],['MAYA MAELSTROM','#a76d51','#552a8c','#e3ceff','#1c1721'],['NOVA ROSE','#efc3a2','#db4b85','#fff0f5','#5b372b'],['ECHO VALKYRIE','#b87d62','#2a566e','#a8f2ff','#17151a'],
+ ['DAKOTA DYNAMO','#8a5946','#d78625','#ffe0a4','#16141b'],['ROXY REIGN','#c99376','#182e60','#e2eaff','#30242a'],['SIERRA SPARK','#d7ad8a','#3b9a9a','#b9fff5','#4b3025'],['ARIA FROST','#e1b99f','#5179c8','#f3fbff','#d0d6e8'],
+ ['KIRA KNIGHT','#a86f50','#22232c','#f4f4fa','#211c1a'],['BLAZE BLOOM','#c99376','#bc3e2f','#ffdb59','#4d221d'],['TESSA TEMPEST','#bd8d6f','#45409d','#d6d4ff','#211b2a'],['MYSTIC MARLOWE','#edc4a3','#5c276d','#f6ddff','#4b3044'],
+ ['ZARA ZENITH','#9f684a','#20826c','#b8ffdc','#15141b'],['WILLOW WILDFIRE','#d6a17e','#bd4226','#ffcd79','#583c27'],['PHOENIX FABLE','#b98163','#6c2c9b','#e7cbff','#21151f'],['RAVEN RUSH','#c08a73','#212633','#b6d5ef','#17151d'],
+ ['TORI THUNDER','#895740','#d5a92e','#fff0a7','#17141a'],['LEXI LUMEN','#e5b99a','#2992aa','#c5faff','#64402b'],['HARPER HAVOC','#af7b60','#77402c','#dfb49a','#221c1b'],['JADE JETSTREAM','#c99376','#2a5fa6','#e8f2ff','#2a1d25']
+];
+womenRoster.forEach((w,i)=>{roster.push({name:w[0],rating:75+(i*7)%16,sub:['THE HIGH-FLYER','THE POWERHOUSE','THE MAT WIZARD','THE MAIN EVENT'][i%4],skin:w[1],gear:w[2],trim:w[3],hair:w[4],hairStyle:(i*7+5)%23,gearStyle:(i*11+2)%31,gender:'women',style:['speed','balanced','technical','power'][i%4],power:.84+(i%7)*.045,division:'WOMEN',show:['GRAVITY','NOVA','SUMMIT'][i%3]})});
+
+// Expand the headliners and showcase roster into a 406-wrestler roster with distinct names, looks and ratings.
+const generatedFirst=['ACE','IRON','SHADOW','THUNDER','NIGHT','WILD','ROYAL','SILVER','CRIMSON','STONE','PHANTOM','TITAN','STORM','BLAZE','RAPTOR','VIPER','LION','FROST','REBEL','COSMIC'];
+const generatedLast=['FALCON','WOLF','TIGER','HAMMER','COMET','VIPER','PHOENIX','FURY','KNIGHT','LEGEND'];
+const palette=[['#bd8359','#2484ed','#f4f6ff','#35251d'],['#87563e','#e2b53a','#fff1a8','#141319'],['#dfa47a','#36b987','#d8fff0','#4c3425'],['#edc1a4','#9e42d7','#f9edff','#e8483c'],['#6b4235','#ef742f','#ffe0b0','#12121a'],['#a96b45','#ec343c','#ffd35c','#19141a'],['#c28d72','#264caa','#f4f6ff','#24202a']];
+const styles=['speed','balanced','power','technical','tricky','tank'];
+for(let i=0;i<194;i++){
+ const name=generatedFirst[Math.floor(i/generatedLast.length)]+' '+generatedLast[i%generatedLast.length];
+ const c=palette[i%palette.length];
+ roster.push({name,rating:75+(i*7)%16,sub:['THE SHOWSTOPPER','THE CONTENDER','THE BREAKOUT STAR','THE GRAPPLER','THE WARRIOR','THE MAIN EVENT'][i%6],skin:`hsl(${18+(i*17)%32} 38% ${34+(i*11)%24}%)`,gear:`hsl(${(i*137+18)%360} 76% ${38+(i*3)%18}%)`,trim:`hsl(${(i*223+45)%360} 90% ${66+(i*5)%21}%)`,hair:`hsl(${(i*61+5)%360} 18% ${7+(i*7)%13}%)`,hairStyle:(i*7)%23,gearStyle:(i*13)%31,style:styles[i%styles.length],power:.82+(i%8)*.055});
+}
+roster.forEach((r,i)=>{if(r.hairStyle===undefined)r.hairStyle=(i*7)%23;if(r.gearStyle===undefined)r.gearStyle=(i*13)%31;});
+// Add a larger all-original roster inspired by the broad mix of contemporary stars,
+// legends, high-flyers, technicians and heavyweights found in modern wrestling games.
+// These are fictional names and visual presets, not copies of real wrestlers or likenesses.
+const freshFirst=['NEON','BLACKTOP','VOLT','GRANITE','RISING','VIOLET','WRAITH','BOLT','NOVA','MAVERICK','MONARCH','CIPHER','ORBIT','SOLAR','CROWN','FABLE','RUSH','GLACIER','EMBER','RADIANT','MACHINE','DYNAMO','SENTINEL','OUTLAW','SKYLINE','ECLIPSE','RIOT','ATLAS','SUMMIT','GRIT','CIRCUIT','COBALT','BLITZ','HOLLOW','APEX','RUMBLE','ARCANE','MIRAGE','JETSTREAM','SUNSTORM','NIGHTFALL','IRONCLAD','EVEREST','CROSSWIND','WILDFIRE','LUMEN','DARKSTAR','KINGFISHER','HIGHVOLT','STONEGATE'];
+const freshLast=['RUNNER','VANGUARD','COLOSSUS','STRIKER','SPECTER','MERCURY','MARAUDER','COMMANDER','TEMPEST','TORCH','OUTCAST','BULWARK','ROCKET','TITAN','RANGER','CAVALIER','NOMAD','WARDEN','PIONEER','ACE','RIOTER','SABER','DRIFTER','GUARDIAN','FALCONER','RIVETER','BREAKWATER','FIREBIRD','MOUNTAIN','COMET','LANCER','WILDCARD'];
+const alreadyNamed=new Set(roster.map(r=>r.name));
+let freshIndex=0;
+for(const first of freshFirst){for(const last of freshLast){if(roster.length>=406)break;const name=first+' '+last;if(alreadyNamed.has(name))continue;alreadyNamed.add(name);const i=freshIndex++;const c=palette[(i+2)%palette.length];
+ roster.push({name,rating:75+(i*11)%16,sub:['THE MAIN EVENT','THE HIGH-FLYER','THE POWERHOUSE','THE RING GENERAL','THE BREAKOUT STAR','THE MAT WIZARD','THE FAN FAVORITE','THE RULE BREAKER'][i%8],skin:`hsl(${16+(i*19)%38} 38% ${33+(i*13)%27}%)`,gear:`hsl(${(i*149+28)%360} 76% ${36+(i*5)%22}%)`,trim:`hsl(${(i*227+53)%360} 88% ${64+(i*7)%24}%)`,hair:`hsl(${(i*67+7)%360} 17% ${7+(i*9)%15}%)`,hairStyle:(i*11)%23,gearStyle:(i*17)%31,style:styles[i%styles.length],power:.82+(i%9)*.05,division:['OPENWEIGHT','HEAVYWEIGHT','TECHNICAL','FLYWEIGHT'][i%4],show:['GRAVITY','NOVA','SUMMIT'][i%3]});
+}}if(roster.length!==406)throw new Error('Expected 406 base roster entries, got '+roster.length);
+
+// Two additional original wrestlers requested by the player. Keep their ratings
+// within the established non-headliner range and give each a distinct haircut/kit.
+roster.push(
+ {name:'JOSEPH FIST',rating:88,sub:'THE CLEAN STRIKER',skin:'#f1c6a7',gear:'#173d82',trim:'#eaf2ff',hair:'#302019',hairStyle:7,gearStyle:4,style:'technical',power:.92,division:'OPENWEIGHT',show:'GRAVITY'},
+ {name:'ETHAN BANDA',rating:87,sub:'THE QUICK THINKER',skin:'#e6b698',gear:'#692b49',trim:'#ffd45f',hair:'#70472b',hairStyle:13,gearStyle:2,style:'speed',power:.89,division:'OPENWEIGHT',show:'NOVA'}
+);
+
+const matchTypes=[
+ {name:'SINGLES',short:'SINGLES',desc:'Classic one-on-one: pin or submit inside the ring'},
+ {name:'NO DISQUALIFICATION',short:'NO-DQ',desc:'No disqualification rules'},
+ {name:'FALLS COUNT ANYWHERE',short:'FALLS ANYWHERE',desc:'Pins and submissions work at ringside too'},
+ {name:'STEEL CAGE',short:'STEEL CAGE',desc:'The cage keeps both wrestlers inside'},
+ {name:'LAST WRESTLER STANDING',short:'LAST STANDING',desc:'Survive the ten-count; no pinfalls'},
+ {name:'INFERNO FIRE MATCH',short:'INFERNO FIRE',desc:'Fire surrounds the ring; avoid the flames and finish the match'},
+ {name:'THREE STAGES OF GLORY',short:'THREE STAGES',desc:'Win two of three stages to take the series'},
+ {name:'SURRENDER MATCH',short:'SURRENDER',desc:'Submission only; no pinfalls'},
+ {name:'RINGSIDE SHOWDOWN',short:'RINGSIDE',desc:'Both wrestlers must be at ringside for a pin or submission'},
+ {name:'LEGACY GAUNTLET',short:'GAUNTLET',desc:'Beat five opponents in a row'},
+ {name:'TAG TEAM',short:'TAG TEAM',desc:'Two-person teams with ringside partners and tag swaps'},
+ {name:'STREET FIGHT',short:'STREET FIGHT',desc:'No disqualification; weapons and ringside fighting allowed'}
+] ;
+const arenaList=[
+ {name:'GRAVITY ARENA',sub:'THE FLAGSHIP SHOW',accent:'#f04452',secondary:'#ffce55',wallA:'#e52b43',wallB:'#10050b',matA:'#e3e5ed',matB:'#9fa6bb'},
+ {name:'NOVA DOME',sub:'COSMIC MAIN EVENT',accent:'#49d9ff',secondary:'#a77cff',wallA:'#087aa8',wallB:'#090921',matA:'#bceaf6',matB:'#678aa7'},
+ {name:'SUMMIT HALL',sub:'THE PEAK OF FIGHT NIGHT',accent:'#c18aff',secondary:'#65f2cf',wallA:'#67419b',wallB:'#0d0920',matA:'#d9d4f0',matB:'#8e88b5'},
+ {name:'CRIMSON COLLISION CENTER',sub:'REDLINE SHOWDOWN',accent:'#ff425b',secondary:'#ffad5b',wallA:'#9d1029',wallB:'#180711',matA:'#eedde3',matB:'#9f7e8d'},
+ {name:'NEON SKYLINE',sub:'CITY LIGHTS • BIG FIGHTS',accent:'#35f0ca',secondary:'#ff4fcb',wallA:'#096f75',wallB:'#07101b',matA:'#d3f4ef',matB:'#718e99'},
+ {name:'IRONWORKS STADIUM',sub:'BUILT FOR BRAWLING',accent:'#f5a64c',secondary:'#e5e8ee',wallA:'#7a3d1b',wallB:'#100b08',matA:'#d9d5cc',matB:'#8b8276'},
+ {name:'ECLIPSE PAVILION',sub:'DARKNESS MEETS DRAMA',accent:'#9774ff',secondary:'#d0b4ff',wallA:'#38216c',wallB:'#050611',matA:'#d8d3ec',matB:'#77718f'},
+ {name:'THUNDER BAY ARENA',sub:'FEEL THE IMPACT',accent:'#42b7ff',secondary:'#f1f6ff',wallA:'#16558b',wallB:'#07101b',matA:'#d9eafa',matB:'#7c94ae'},
+ {name:'FROSTLINE COLISEUM',sub:'COLD STEEL • HOT ACTION',accent:'#a6efff',secondary:'#e6fbff',wallA:'#4a9eb7',wallB:'#0b1c2d',matA:'#eaf8ff',matB:'#94b9ce'},
+ {name:'WILDFIRE BOWL',sub:'THE HEAT IS ON',accent:'#ff7a35',secondary:'#ffd24b',wallA:'#a83715',wallB:'#1b0704',matA:'#f1dfd4',matB:'#a78375'},
+ {name:'ROYAL CROWN THEATER',sub:'A NIGHT OF CHAMPIONS',accent:'#e8c65a',secondary:'#bb8bff',wallA:'#7d5a17',wallB:'#130d19',matA:'#eee6d5',matB:'#a99b80'},
+ {name:'UNDERGROUND FIGHT CLUB',sub:'NO FLASH • ALL FIGHT',accent:'#cbd2dd',secondary:'#ef4a5f',wallA:'#343b49',wallB:'#05070d',matA:'#c6c9cf',matB:'#777c88'},
+ {name:'CYBER CITY ARENA',sub:'NEXT-GEN NIGHT SHOW',accent:'#00e5ff',secondary:'#ff42d0',wallA:'#065078',wallB:'#020817',matA:'#c7f5fb',matB:'#6686a0'},
+ {name:'MOUNTAIN PEAK STADIUM',sub:'THE SUMMIT SHOWDOWN',accent:'#6ce0a0',secondary:'#d8f1b5',wallA:'#246449',wallB:'#06140e',matA:'#d9eee2',matB:'#8cae9c'},
+ {name:'BLACKOUT WAREHOUSE',sub:'LIGHTS OUT • FIGHT ON',accent:'#e2e6f0',secondary:'#ff455d',wallA:'#3b4053',wallB:'#030409',matA:'#d3d4dc',matB:'#777b87'},
+ {name:'SUNBURST STADIUM',sub:'BRIGHT LIGHTS • BRIGHTER STARS',accent:'#ffcf4d',secondary:'#ff7e42',wallA:'#b26b12',wallB:'#1a0c02',matA:'#f7edcf',matB:'#b5a17b'},
+ {name:'MIDNIGHT METRO DOME',sub:'THE CITY NEVER SLEEPS',accent:'#5b98ff',secondary:'#e56eff',wallA:'#263f93',wallB:'#07091b',matA:'#dce3f7',matB:'#8996b9'},
+ {name:'DESERT STORM ARENA',sub:'SAND • SPEED • STRENGTH',accent:'#e8aa60',secondary:'#ffe2a2',wallA:'#9a572b',wallB:'#1b1008',matA:'#f2e0c5',matB:'#b79a76'},
+ {name:'ELECTRIC AVENUE',sub:'TURN UP THE VOLTAGE',accent:'#b7fa42',secondary:'#36e9fa',wallA:'#4b6f16',wallB:'#090f04',matA:'#eff6d8',matB:'#a1b883'},
+ {name:'OCEANFRONT ARENA',sub:'WAVES OF MOMENTUM',accent:'#2be2db',secondary:'#4ea7ff',wallA:'#087b8a',wallB:'#04121c',matA:'#d2f0ee',matB:'#82afb5'},
+ {name:'HAUNTED HOLLOW',sub:'A CHILLING MAIN EVENT',accent:'#a8ed79',secondary:'#c48aff',wallA:'#3c6630',wallB:'#080b0d',matA:'#dedfd6',matB:'#8d9387'},
+ {name:'APEX GRAND ARENA',sub:'WHERE LEGENDS RISE',accent:'#ffce55',secondary:'#ff4e76',wallA:'#6e253f',wallB:'#0b0711',matA:'#f0e2e5',matB:'#a48a97'}
+];
+function makeRingsideProps(){
+ return [
+  {x:105,y:555,type:'chair',available:true},{x:205,y:604,type:'table',available:true},{x:300,y:552,type:'ladder',available:true},
+  {x:395,y:615,type:'kendo stick',available:true},{x:900,y:555,type:'baseball bat',available:true},{x:995,y:610,type:'steel steps',available:true},
+  {x:1085,y:552,type:'sledgehammer',available:true},{x:1160,y:610,type:'trash can',available:true},{x:535,y:600,type:'broom',available:true}
+ ];
+}
+function arenaTheme(name=arenaName){return arenaList.find(a=>a.name===name)||arenaList[0]}
+function shortArenaName(name=arenaName){return name.replace(/ (ARENA|DOME|HALL|STADIUM|COLISEUM|PAVILION|CENTER|BOWL|THEATER)$/,'')}
+let state='menu',selected=0,opponentIndex=2,rosterCursor=0,selectionSlot='player',localMode=false,controllerSide='left',player=null,enemy=null,frame=0,matchTime=0,notice='WELCOME TO FIGHTER 5!',noticeTimer=180,menuHover=-1,menuIndex=0,mouse={x:0,y:0},lastTs=0,pausedFrom='match';
+let gameMode='quick',aiDifficulty=2,careerWins=0,careerLosses=0,stageWinsPlayer=0,stageWinsEnemy=0,currentStage=1,gauntletWins=0;
+let universeShowNo=1,universeDraftIndex=0,universeDraftLog='No draft picks yet.',universeRivalries=0,universeTitleMatch=false;
+let universeShowNames=['GRAVITY NIGHT','NOVA LIVE','SUMMIT SUNDAY'],universeShowMap=roster.map((_,i)=>i%3),universeChampionIndexes=[2,1,3];
+let keys={},buttons=[],arenaName='GRAVITY ARENA',arenaCursor=0,arenaEntry='match',arenaReturnSlot='opponent',entranceTimer=0,shake=0,flash=0,submission=0,pinCount=0,pinTimer=0,pinSide='',finishReason='',crowdMood=0,roundIntro=0;
+let matchTypeIndex=0,lastStandPlayer=0,lastStandEnemy=0,crowdChant='FIGHTER FIVE! FIGHTER FIVE!',crowdChantTimer=0,crowdTimer=null,virtualKeys=new Set(),activePointerId=null,virtualKeysByPointer=new Map(),touchStickPointers=new Map(),touchStickPosition=null,touchMode=(('ontouchstart' in window)||navigator.maxTouchPoints>0||matchMedia('(pointer:coarse)').matches);
+// Touch controls are opt-in from Settings so the PC version keeps its clean keyboard/gamepad HUD.
+let touchControlsEnabled=false,settingsReturnState='menu',settingsCursor=0,deferredInstallPrompt=null;
+try{touchControlsEnabled=localStorage.getItem('fighter5_touch_controls')==='true'}catch(_){touchControlsEnabled=false}
+if(touchMode)document.body.classList.add('touch-device');
+let controller={connected:false,moveX:0,moveY:0,jumpPressed:false,quickPressed:false,heavyPressed:false,grapplePressed:false,pinPressed:false,submit:false,weaponPressed:false,finisherPressed:false,kickPressed:false,whipPressed:false,climbPressed:false,exitPressed:false,tagPressed:false,kickAttackPressed:false},gamepadPrev=[];
+let chairs=makeRingsideProps();
+let playerPartner=null,enemyPartner=null,tagCooldownPlayer=0,tagCooldownEnemy=0;
+let refX=640,refY=430,ringOutPlayer=0,ringOutEnemy=0,commentaryLine='THE CROWD IS READY FOR THE MAIN EVENT!',commentaryTimer=0,kickoutNeedle=.08,kickoutDirection=1,kickoutTarget=.58,kickoutAttempts=0;
+let lastVoiceAt=0;
+let audioCtx=null,musicOn=false,musicTimer=null,musicStep=0;
+const rand=(a,b)=>Math.random()*(b-a)+a,clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const ease=(a,b,t)=>a+(b-a)*t;
+function rounded(x,y,w,h,r,fill,stroke=null,lw=1){ctx.beginPath();ctx.roundRect(x,y,w,h,r);if(fill){ctx.fillStyle=fill;ctx.fill()}if(stroke){ctx.lineWidth=lw;ctx.strokeStyle=stroke;ctx.stroke()}}
+function text(str,x,y,size,color='#fff',align='left',weight='normal',font='Arial,sans-serif'){ctx.save();ctx.font=`${weight} ${size}px ${font}`;ctx.textAlign=align;ctx.textBaseline='middle';ctx.fillStyle=color;ctx.shadowColor='#000';ctx.shadowBlur=4;ctx.fillText(str,x,y);ctx.restore()}
+function grad(x,y,w,h,c1,c2){let g=ctx.createLinearGradient(x,y,x,y+h);g.addColorStop(0,c1);g.addColorStop(1,c2);return g}
+function drawBackdrop(){
+ const theme=arenaTheme();
+ const bg=ctx.createLinearGradient(0,0,0,H);bg.addColorStop(0,theme.wallB);bg.addColorStop(.48,'#171932');bg.addColorStop(1,'#05060d');ctx.fillStyle=bg;ctx.fillRect(0,0,W,H);
+ // roof trusses
+ ctx.strokeStyle='#343856';ctx.lineWidth=3;for(let x=-120;x<W+100;x+=160){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x+240,140);ctx.lineTo(x+320,40);ctx.stroke()}
+ // light beams
+ ctx.save();ctx.globalAlpha=.14;for(let i=0;i<7;i++){let x=90+i*185;ctx.fillStyle=i%2?'#f4f5fa':'#e52b43';ctx.beginPath();ctx.moveTo(x,18);ctx.lineTo(x-180,480);ctx.lineTo(x+175,480);ctx.closePath();ctx.fill()}ctx.restore();
+ // crowd seats and audience silhouettes
+ for(let row=0;row<7;row++){let y=145+row*28;for(let i=0;i<77;i++){let x=i*17+(row%2)*8;if(x>W)continue;let seed=Math.sin(i*13.7+row*45.3);ctx.fillStyle=['#d44c60','#399fbc','#e4b346','#8b74dd','#e5e7f3','#49b58e'][Math.floor(Math.abs(seed)*6)];ctx.globalAlpha=.25+((i*7+row*13)%5)*.08;ctx.beginPath();ctx.arc(x,y+Math.sin(i+row)*4,4+(row%3),0,Math.PI*2);ctx.fill();ctx.fillRect(x-3,y+4,6,12)} }
+ ctx.globalAlpha=1;
+ // rear video wall
+ let wall=grad(160,205,960,125,theme.wallA,theme.wallB);ctx.fillStyle=wall;ctx.fillRect(160,202,960,125);ctx.strokeStyle=theme.accent;ctx.lineWidth=3;ctx.strokeRect(170,212,940,105);
+ ctx.save();ctx.translate(640,267);ctx.transform(1,0,-.12,1,0,0);text(shortArenaName(),0,0,Math.min(56,820/Math.max(8,shortArenaName().length)*.82),'#ffffff','center','900','Impact,Arial Narrow,sans-serif');ctx.restore();
+ // stage pillars and screen glows
+ for(let x of [94,1120]){ctx.fillStyle=grad(x,150,64,380,theme.wallA,'#05060b');ctx.fillRect(x,145,64,385);for(let y=164;y<515;y+=42){ctx.fillStyle=(Math.floor(y/42)%2)?theme.accent:theme.secondary;ctx.globalAlpha=.8;ctx.fillRect(x+9,y,46,5)}ctx.globalAlpha=1}
+ // Handmade fan signs and animated cheering arms in the stands.
+ const signs=[{x:105,y:188,w:124,t:'GRAVITY!',c:'#ffce55'},{x:325,y:237,w:144,t:'LET THEM FIGHT',c:'#f4f4fb'},{x:790,y:190,w:140,t:'FIGHTER 5',c:'#f04452'},{x:1005,y:249,w:132,t:'BIG LAO!',c:'#9c78ff'},{x:515,y:182,w:110,t:'OHhh!',c:'#55eea7'}];
+ for(const sg of signs){ctx.save();ctx.translate(sg.x,sg.y);ctx.rotate(Math.sin(frame*.025+sg.x)*.025);rounded(-3,1,sg.w+6,34,4,'#050711','#b8c5e8',2);rounded(0,0,sg.w,29,3,sg.c,'#fff',1);text(sg.t,sg.w/2,15,sg.t.length>10?10:13,'#111528','center','900');ctx.restore()}
+}
+function drawRingsideZone(){ctx.save();ctx.strokeStyle='rgba(255,206,85,.8)';ctx.lineWidth=3;ctx.setLineDash([9,7]);ctx.beginPath();ctx.roundRect(1010,518,214,116,15);ctx.stroke();ctx.setLineDash([]);ctx.globalAlpha=.12;ctx.fillStyle='#ffce55';ctx.fill();ctx.globalAlpha=1;text('RINGSIDE ZONE',1117,532,10,'#ffce55','center','900');ctx.restore()}
+function drawInfernoEffects(){ctx.save();for(let side=0;side<2;side++){for(let i=0;i<22;i++){let x=270+i*34,y=side===0?279:460, flick=8+Math.sin(frame*.22+i*1.9)*7;ctx.globalAlpha=.38+Math.abs(Math.sin(frame*.16+i))*.45;ctx.fillStyle=i%2?'#ff3b2f':'#ffb52e';ctx.beginPath();ctx.moveTo(x,y);ctx.quadraticCurveTo(x-9,y-flick*.6,x,y-flick);ctx.quadraticCurveTo(x+8,y-flick*.5,x+3,y);ctx.fill();ctx.fillStyle='#ffe47b';ctx.beginPath();ctx.moveTo(x+1,y);ctx.lineTo(x+2,y-flick*.58);ctx.lineTo(x+5,y);ctx.fill()}}ctx.globalAlpha=1;ctx.restore()}
+function drawRing(){
+ const theme=arenaTheme();
+ // Ringside floor so both wrestlers can leave the ropes and keep brawling.
+ ctx.fillStyle=grad(0,525,W,270,'#171a2b','#05060c');ctx.fillRect(0,525,W,275);
+ for(let i=0;i<12;i++){ctx.strokeStyle='rgba(125,136,178,.12)';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(i*120,535);ctx.lineTo(i*120-100,800);ctx.stroke()}
+ // ring shadow and ramp
+ ctx.save();ctx.globalAlpha=.45;ctx.fillStyle='#000';ctx.beginPath();ctx.ellipse(640,600,430,95,0,0,Math.PI*2);ctx.fill();ctx.restore();
+ ctx.fillStyle='#12182b';ctx.beginPath();ctx.moveTo(235,350);ctx.lineTo(1045,350);ctx.lineTo(1120,570);ctx.lineTo(160,570);ctx.closePath();ctx.fill();
+ ctx.fillStyle='#292f4d';ctx.beginPath();ctx.moveTo(255,360);ctx.lineTo(1025,360);ctx.lineTo(1080,548);ctx.lineTo(200,548);ctx.closePath();ctx.fill();
+ // apron
+ ctx.fillStyle=theme.wallB;ctx.fillRect(227,474,826,70);ctx.strokeStyle=theme.accent;ctx.lineWidth=4;ctx.strokeRect(227,474,826,70);text(shortArenaName(),640,513,Math.min(36,720/Math.max(8,shortArenaName().length)*.78),'#f3f3ff','center','900','Impact,Arial Narrow,sans-serif');
+ // mat trapezoid
+ let mat=ctx.createLinearGradient(0,280,0,510);mat.addColorStop(0,theme.matA);mat.addColorStop(1,theme.matB);ctx.fillStyle=mat;ctx.beginPath();ctx.moveTo(285,278);ctx.lineTo(995,278);ctx.lineTo(1042,480);ctx.lineTo(238,480);ctx.closePath();ctx.fill();
+ // mat panels and logo
+ ctx.strokeStyle='rgba(36,46,80,.16)';ctx.lineWidth=2;for(let i=0;i<7;i++){ctx.beginPath();ctx.moveTo(300+i*100,285);ctx.lineTo(260+i*105,475);ctx.stroke()}ctx.beginPath();ctx.ellipse(640,377,145,54,0,0,Math.PI*2);ctx.strokeStyle='rgba(24,31,59,.22)';ctx.lineWidth=7;ctx.stroke();text(arenaName.replace(' ARENA','').replace(' DOME','').replace(' HALL',''),640,379,32,'rgba(30,37,65,.30)','center','900','Impact,Arial Narrow,sans-serif');
+ // ring posts ropes
+ const posts=[[250,277],[1018,277],[220,480],[1048,480]];
+ const ropeColors=['#f04452','#f8fbff','#176dff'];for(let j=0;j<3;j++){ctx.strokeStyle=ropeColors[j];ctx.lineWidth=j===1?7:8;let off=j*58;ctx.beginPath();ctx.moveTo(250,277+off*.43);ctx.lineTo(1018,277+off*.43);ctx.stroke();ctx.beginPath();ctx.moveTo(250,277+off*.43);ctx.lineTo(220,480-off*.2);ctx.stroke();ctx.beginPath();ctx.moveTo(1018,277+off*.43);ctx.lineTo(1048,480-off*.2);ctx.stroke()}
+ ctx.strokeStyle='#f8fbff';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(220,480);ctx.lineTo(1048,480);ctx.stroke();
+ for(let [x,y] of posts){ctx.fillStyle=theme.wallB;ctx.fillRect(x-12,y-20,24,230);ctx.fillStyle=theme.accent;ctx.fillRect(x-17,y-21,34,29);ctx.strokeStyle=theme.secondary;ctx.lineWidth=2;ctx.strokeRect(x-17,y-21,34,29)}
+ // turnbuckle lights
+ ctx.fillStyle='#fff';for(let [x,y] of [[250,277],[1018,277],[220,480],[1048,480]]){ctx.beginPath();ctx.arc(x,y,5,0,Math.PI*2);ctx.fill()}
+ // Floor seats and safe ringside props.
+ if(matchTypeIndex===8)drawRingsideZone();
+ for(let cx of [70,1120]){ctx.fillStyle='#282c43';ctx.fillRect(cx,580,95,47);ctx.strokeStyle='#68718e';ctx.lineWidth=3;ctx.strokeRect(cx,580,95,47);for(let j=0;j<3;j++){ctx.fillStyle=['#ffce55','#46e4ef','#f04452'][j];ctx.fillRect(cx+10+j*27,590,18,18)}}
+ ctx.fillStyle='#11182a';ctx.fillRect(0,650,W,20);ctx.fillStyle='#f04452';ctx.fillRect(0,650,W,4);ctx.fillStyle='#f4f4f8';ctx.fillRect(0,665,W,4);text(arenaName,640,659,14,'#fff','center','900');
+ for(const tool of chairs){if(tool.available){drawWeaponIcon(tool.type,tool.x,tool.y,1.12);rounded(tool.x-48,tool.y+25,96,16,4,'rgba(5,8,17,.94)','#68718e',1);text(tool.type.toUpperCase(),tool.x,tool.y+33,8,'#ffce55','center','900')}}
+}
+function drawGearCase(x,y,scale=1){ctx.save();ctx.translate(x,y);ctx.scale(scale,scale);ctx.fillStyle='#26334a';ctx.strokeStyle='#c6d1e7';ctx.lineWidth=2;ctx.beginPath();ctx.roundRect(-22,-18,44,33,4);ctx.fill();ctx.stroke();ctx.fillStyle='#687f9f';ctx.fillRect(-18,-13,36,6);ctx.fillStyle='#f4cf65';ctx.fillRect(-5,-4,10,10);ctx.strokeStyle='#d7e5f8';ctx.beginPath();ctx.moveTo(-18,18);ctx.lineTo(18,18);ctx.stroke();ctx.restore()}
+function drawLights(){
+ ctx.save();ctx.globalCompositeOperation='screen';for(let i=0;i<6;i++){let x=150+i*195;let a=.16+Math.sin(frame*.025+i)*.04;ctx.globalAlpha=a;ctx.fillStyle=i%2?'#32e0f0':'#ad5bff';ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x-120,490);ctx.lineTo(x+120,490);ctx.closePath();ctx.fill()}ctx.restore();
+}
+function makeFighter(info,x,side,y=410){return {info,x,y,side,hp:300,displayHp:300,lastHealthSeen:300,healthFlash:0,stamina:100,stun:0,down:0,downType:'',air:0,vy:0,attack:0,attackCooldown:0,attackDuration:18,attackKind:'',attackHit:false,walk:0,moveAmount:0,flash:0,taunt:0,pinning:false,submitting:false,knockouts:0,face:1,aiThink:0,aiMove:0,finisher:0,limbs:0,weaponTimer:0,weaponCooldown:0,fallCount:0,inRing:true,onTopRope:false,climbTimer:0,whipTimer:0,whipVx:0,whipBounced:false,hasChair:false,weaponType:null,fireTime:0,tagCooldown:0}}
+function drawFighter(f){
+ const floor=Number.isFinite(f.y)?f.y:448,inf=f.info,scale=(inf.style==='power'||inf.style==='tank')?1.08:1;
+ const down=f.down>0,face=f.face<0?-1:1,phase=f.walk||0;
+ ctx.save();ctx.translate(f.x,floor-f.air);ctx.scale(face*scale,scale);if(inf.gender==='women')ctx.scale(.88,1);
+ // Ground shadow, feet are anchored to the same baseline while moving.
+ ctx.save();ctx.globalAlpha=down?.20:.30;ctx.fillStyle='#02030a';ctx.beginPath();ctx.ellipse(0,3+(f.air||0)*.2,down?56:26,down?11:7,0,0,Math.PI*2);ctx.fill();ctx.restore();
+ if(down){
+   ctx.save();ctx.translate(-58,-12);ctx.rotate(-.035);ctx.fillStyle=inf.gear;ctx.beginPath();ctx.roundRect(0,-20,82,28,10);ctx.fill();ctx.fillStyle=inf.skin;ctx.beginPath();ctx.roundRect(65,-25,34,29,12);ctx.fill();ctx.fillStyle=inf.hair;ctx.beginPath();ctx.ellipse(91,-29,18,8,0,Math.PI,Math.PI*2);ctx.fill();
+   ctx.strokeStyle=inf.skin;ctx.lineCap='round';ctx.lineWidth=13;ctx.beginPath();ctx.moveTo(10,-11);ctx.lineTo(-12,2);ctx.lineTo(-22,20);ctx.moveTo(24,-11);ctx.lineTo(43,0);ctx.lineTo(51,17);ctx.stroke();
+   ctx.fillStyle=inf.gear;ctx.beginPath();ctx.roundRect(3,-1,22,32,7);ctx.roundRect(27,-1,22,32,7);ctx.fill();ctx.strokeStyle=inf.skin;ctx.lineWidth=12;ctx.beginPath();ctx.moveTo(11,25);ctx.lineTo(1,43);ctx.lineTo(-13,49);ctx.moveTo(40,25);ctx.lineTo(57,38);ctx.lineTo(70,43);ctx.stroke();ctx.restore();ctx.restore();return;
+ }
+ const moving=Math.max(.10,Math.min(1.2,f.moveAmount||0));
+ const stride=Math.sin(phase)*13*moving, liftA=Math.max(0,Math.cos(phase))*5*moving, strideB=-stride;
+ const p= f.attack>0 ? Math.sin(clamp(1-f.attack/(f.attackDuration||18),0,1)*Math.PI) : 0;
+ const punching=f.attack>0,heavy=f.attackKind==='heavy'||f.attackKind==='finisher'||f.attackKind==='chair',grapple=f.attackKind==='grapple';
+ const lean=punching?(heavy?-.10*p:-.055*p):Math.sin(phase)*.018*moving;
+ ctx.save();ctx.rotate(lean);
+ const line=(x1,y1,x2,y2,w,c)=>{ctx.strokeStyle=c;ctx.lineWidth=w;ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke()};
+ const joint=(x,y,r,c)=>{ctx.fillStyle=c;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill()};
+ // Boots and articulated legs with alternating knees and ankles for a real walking cycle.
+ const kickReach=f.attackKind==='kick'?40*p:0;const hipL=-12,hipR=12,kneeLX=-14+stride*.48,kneeRX=15+strideB*.48+kickReach*.38;
+ line(hipL,-57,kneeLX,-32-liftA,17,inf.gear);line(kneeLX,-32-liftA,(-17+stride*.78),-7+liftA,13,'#20232d');
+ line(hipR,-57,kneeRX,-32-liftA*.35-kickReach*.24,17,inf.gear);line(kneeRX,-32-liftA*.35-kickReach*.24,(17+strideB*.78)+kickReach,-7+liftA*.35-kickReach*.38,13,'#20232d');
+ joint(kneeLX,-32-liftA,7,inf.gear);joint(kneeRX,-32-liftA*.35,7,inf.gear);
+ // Boots point forward; color accents differ with each gear kit.
+ ctx.fillStyle='#12151f';ctx.beginPath();ctx.roundRect(-25+stride*.78,-10+liftA,18,10,4);ctx.roundRect(8+strideB*.78,-10+liftA*.35,18,10,4);ctx.fill();ctx.fillStyle=inf.trim;ctx.fillRect(-23+stride*.78,-10+liftA,10,3);ctx.fillRect(10+strideB*.78,-10+liftA*.35,10,3);
+ // Torso: tapered athletic silhouette, shorts / singlet colors and gear details.
+ ctx.fillStyle=inf.skin;ctx.beginPath();ctx.moveTo(-20,-111);ctx.quadraticCurveTo(-32,-108,-31,-91);ctx.lineTo(-25,-62);ctx.quadraticCurveTo(0,-54,25,-62);ctx.lineTo(31,-91);ctx.quadraticCurveTo(31,-108,20,-111);ctx.closePath();ctx.fill();
+ ctx.fillStyle=inf.gear;ctx.beginPath();ctx.moveTo(-23,-108);ctx.quadraticCurveTo(-31,-104,-29,-91);ctx.lineTo(-24,-70);ctx.lineTo(-18,-65);ctx.lineTo(18,-65);ctx.lineTo(24,-70);ctx.lineTo(29,-91);ctx.quadraticCurveTo(31,-105,23,-108);ctx.closePath();ctx.fill();
+ // Gear styles: stripes, cross straps, panels, badges and contrasting chest accents.
+ ctx.save();ctx.strokeStyle=inf.trim;ctx.fillStyle=inf.trim;ctx.lineWidth=4;
+ switch((inf.gearStyle??0)%7){
+  case 0: ctx.beginPath();ctx.moveTo(-22,-93);ctx.lineTo(22,-93);ctx.moveTo(-21,-83);ctx.lineTo(21,-83);ctx.stroke();break;
+  case 1: ctx.beginPath();ctx.moveTo(-21,-105);ctx.lineTo(21,-72);ctx.moveTo(21,-105);ctx.lineTo(-21,-72);ctx.stroke();break;
+  case 2: ctx.fillRect(-5,-106,10,37);ctx.fillRect(-23,-90,46,5);break;
+  case 3: ctx.beginPath();ctx.moveTo(-25,-102);ctx.lineTo(0,-78);ctx.lineTo(25,-102);ctx.stroke();ctx.beginPath();ctx.arc(0,-91,5,0,Math.PI*2);ctx.fill();break;
+  case 4: ctx.fillRect(-21,-102,7,32);ctx.fillRect(14,-102,7,32);ctx.fillRect(-8,-83,16,5);break;
+  case 5: ctx.beginPath();ctx.moveTo(-22,-104);ctx.lineTo(22,-104);ctx.lineTo(0,-75);ctx.closePath();ctx.fill();break;
+  default: ctx.fillRect(-18,-101,36,4);ctx.fillRect(-13,-87,26,4);ctx.fillRect(-8,-73,16,4);break;
+ }
+ ctx.fillStyle=inf.gear;ctx.fillRect(-23,-64,46,10);ctx.fillStyle=inf.trim;ctx.fillRect(-23,-62,46,4);ctx.restore();
+ // Arms with shoulder, elbow, forearm and closed-fist joints. Punch extension peaks mid-animation.
+ const shoulderY=-101, elbowY=-82;
+ const punchX=grapple?26:heavy?35:42;
+ const reach=punching?p*punchX:0;
+ // Rear arm stays tucked in a guard pose.
+ line(-22,shoulderY,-34,-84,17,inf.skin);joint(-34,-84,8,inf.skin);line(-34,-84,-27,-69,13,inf.skin);joint(-27,-69,7,inf.skin);
+ line(-31,-69,-23,-68,14,inf.trim);joint(-18,-67,7,inf.skin);
+ // Lead arm moves through a shoulder-and-elbow arc, rather than a sliding stick.
+ const ex=grapple?22+reach*.40:26+reach*.48, ey=elbowY-(punching?7*p:0);
+ const hx=grapple?43+reach*.85:36+reach, hy=grapple?-74-7*p:-78-23*p;
+ line(22,shoulderY,ex,ey,19,inf.skin);joint(ex,ey,8,inf.skin);line(ex,ey,hx,hy,13,inf.skin);joint(hx,hy,7,inf.skin);
+ // Wraps and fists.
+ line(hx-4,hy+1,hx+5,hy+1,15,inf.trim);joint(hx+8,hy,8,inf.skin);
+ // Wrist tape on the guard arm.
+ line(-31,-72,-22,-69,14,inf.trim);
+ // Neck and head.
+ ctx.fillStyle=inf.skin;ctx.beginPath();ctx.roundRect(-8,-124,16,20,5);ctx.fill();ctx.beginPath();ctx.ellipse(0,-137,18,22,0,0,Math.PI*2);ctx.fill();
+ // Face details, eyebrows and nose follow the facing direction after the whole model is mirrored.
+ ctx.fillStyle='#f0c7aa';ctx.beginPath();ctx.ellipse(6,-135,3,4,0,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#17151a';ctx.beginPath();ctx.arc(7,-140,2.1,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.moveTo(3,-132);ctx.lineTo(9,-131);ctx.strokeStyle='#5a2a27';ctx.lineWidth=2;ctx.stroke();
+ // 23 hair cuts: crop, spikes, mohawk, curls, long hair, swept side, braids / ponytail and shaved looks.
+ const hairStyle=(inf.hairStyle??0)%23;ctx.fillStyle=inf.hair;
+ if(hairStyle===0){ctx.beginPath();ctx.ellipse(0,-153,18,8,0,Math.PI,Math.PI*2);ctx.fill()}
+ else if(hairStyle===1){ctx.beginPath();ctx.moveTo(-18,-148);ctx.lineTo(-17,-161);ctx.lineTo(-7,-153);ctx.lineTo(0,-164);ctx.lineTo(6,-153);ctx.lineTo(15,-160);ctx.lineTo(18,-147);ctx.closePath();ctx.fill()}
+ else if(hairStyle===2){ctx.fillRect(-5,-163,10,18);ctx.beginPath();ctx.moveTo(-5,-160);ctx.lineTo(0,-171);ctx.lineTo(5,-160);ctx.fill()}
+ else if(hairStyle===3){ctx.beginPath();ctx.ellipse(0,-153,20,11,0,Math.PI,Math.PI*2);ctx.fill();for(let k=-1;k<=1;k++)joint(k*11,-153,5,inf.hair)}
+ else if(hairStyle===4){ctx.beginPath();ctx.ellipse(0,-154,18,5,0,Math.PI,Math.PI*2);ctx.fill();ctx.fillRect(-19,-154,6,27);ctx.fillRect(13,-154,6,27)}
+ else if(hairStyle===5){ctx.beginPath();ctx.ellipse(0,-153,18,7,-.2,Math.PI,Math.PI*2);ctx.fill();ctx.beginPath();ctx.ellipse(18,-145,7,17,-.2,0,Math.PI*2);ctx.fill()}
+ else if(hairStyle===6){ctx.beginPath();ctx.ellipse(0,-152,18,11,0,Math.PI,Math.PI*2);ctx.fill();ctx.fillRect(-18,-153,7,27);ctx.fillRect(11,-153,7,27)}
+ else if(hairStyle===7){ctx.beginPath();ctx.ellipse(-3,-155,16,7,-.35,Math.PI,Math.PI*2);ctx.fill();ctx.beginPath();ctx.moveTo(3,-158);ctx.lineTo(22,-150);ctx.lineTo(8,-146);ctx.closePath();ctx.fill()}
+ else if(hairStyle===8){ctx.beginPath();ctx.ellipse(0,-151,18,9,0,Math.PI,Math.PI*2);ctx.fill();ctx.fillRect(-19,-153,6,23);ctx.fillRect(13,-153,6,23);ctx.beginPath();ctx.ellipse(18,-132,5,16,0,0,Math.PI*2);ctx.fill()}
+ else if(hairStyle===9){ctx.beginPath();ctx.ellipse(0,-154,18,8,0,Math.PI,Math.PI*2);ctx.fill();for(let k=0;k<5;k++)joint(-13+k*6,-154-(k%2)*3,4,inf.hair)}
+ else if(hairStyle===10){ctx.beginPath();ctx.ellipse(0,-151,18,6,0,Math.PI,Math.PI*2);ctx.fill();ctx.fillRect(-17,-152,5,31);ctx.fillRect(12,-152,6,31);ctx.beginPath();ctx.moveTo(-14,-127);ctx.lineTo(-23,-118);ctx.lineTo(-10,-125);ctx.fill()}
+ else if(hairStyle===11){ctx.beginPath();ctx.ellipse(0,-154,17,8,.2,Math.PI,Math.PI*2);ctx.fill();ctx.fillRect(-14,-155,5,25);ctx.fillRect(9,-155,5,25);ctx.beginPath();ctx.ellipse(0,-166,6,4,0,0,Math.PI*2);ctx.fill()}
+ else if(hairStyle===12){ctx.beginPath();ctx.ellipse(0,-155,16,5,0,Math.PI,Math.PI*2);ctx.fill();ctx.fillRect(-17,-155,4,17);ctx.fillRect(13,-155,4,17)}
+ else if(hairStyle===13){ctx.beginPath();ctx.ellipse(0,-152,18,8,0,Math.PI,Math.PI*2);ctx.fill();for(let k=0;k<4;k++){ctx.beginPath();ctx.ellipse(-13+k*8,-154,5,5,0,0,Math.PI*2);ctx.fill()}}
+ else if(hairStyle===14){ctx.beginPath();ctx.ellipse(0,-152,17,6,0,Math.PI,Math.PI*2);ctx.fill();ctx.fillRect(-17,-153,5,29);ctx.fillRect(12,-153,5,29);ctx.beginPath();ctx.ellipse(-18,-127,4,14,-.2,0,Math.PI*2);ctx.fill()}
+ else if(hairStyle===15){ctx.beginPath();ctx.ellipse(0,-153,17,8,0,Math.PI,Math.PI*2);ctx.fill();ctx.beginPath();ctx.moveTo(-18,-151);ctx.lineTo(-7,-158);ctx.lineTo(2,-148);ctx.lineTo(-9,-145);ctx.closePath();ctx.fill()}
+ else if(hairStyle===16){ctx.beginPath();ctx.ellipse(0,-155,17,7,0,Math.PI,Math.PI*2);ctx.fill();ctx.fillRect(-17,-154,4,31);ctx.fillRect(13,-154,4,31);for(let k=0;k<3;k++)joint(-18,-139+k*6,3,inf.hair)}
+ else if(hairStyle===17){ctx.beginPath();ctx.ellipse(0,-153,17,5,0,Math.PI,Math.PI*2);ctx.fill();ctx.fillRect(-17,-153,5,21);ctx.fillRect(12,-153,5,21);ctx.beginPath();ctx.ellipse(0,-163,8,4,0,0,Math.PI*2);ctx.fill()}
+ else if(hairStyle===18){ctx.beginPath();ctx.ellipse(0,-153,18,8,.1,Math.PI,Math.PI*2);ctx.fill();ctx.beginPath();ctx.moveTo(-18,-152);ctx.lineTo(-26,-130);ctx.lineTo(-15,-139);ctx.closePath();ctx.fill()}
+ else if(hairStyle===19){ctx.beginPath();ctx.ellipse(0,-155,17,5,0,Math.PI,Math.PI*2);ctx.fill();for(let k=-2;k<=2;k++)joint(k*6,-159-Math.abs(k),4,inf.hair)}
+ else if(hairStyle===20){ctx.beginPath();ctx.ellipse(0,-154,16,7,0,Math.PI,Math.PI*2);ctx.fill();ctx.beginPath();ctx.ellipse(17,-150,5,13,-.2,0,Math.PI*2);ctx.fill();ctx.beginPath();ctx.ellipse(-17,-150,5,13,.2,0,Math.PI*2);ctx.fill()}
+ else if(hairStyle===21){ctx.beginPath();ctx.ellipse(0,-155,18,7,0,Math.PI,Math.PI*2);ctx.fill();ctx.fillRect(-17,-155,5,11);ctx.fillRect(12,-155,5,11);ctx.beginPath();ctx.moveTo(-5,-157);ctx.lineTo(5,-157);ctx.lineTo(0,-145);ctx.closePath();ctx.fill()}
+ else {ctx.beginPath();ctx.ellipse(0,-154,18,6,0,Math.PI,Math.PI*2);ctx.fill();ctx.fillRect(-18,-154,5,27);ctx.fillRect(13,-154,5,27);ctx.beginPath();ctx.ellipse(0,-164,8,4,0,0,Math.PI*2);ctx.fill()}
+ // Optional facial hair and masks create additional silhouettes.
+ if((inf.gearStyle??0)%5===2){ctx.fillStyle=inf.hair;ctx.beginPath();ctx.moveTo(-8,-127);ctx.quadraticCurveTo(0,-117,9,-127);ctx.lineTo(4,-119);ctx.lineTo(-4,-119);ctx.closePath();ctx.fill()}
+ if((inf.gearStyle??0)%9===4){ctx.fillStyle=inf.trim;ctx.beginPath();ctx.roundRect(-16,-139,32,8,3);ctx.fill();ctx.fillStyle='#18141b';ctx.fillRect(-9,-137,5,3);ctx.fillRect(4,-137,5,3)}
+ // Impact flash and stun stars.
+ if(f.flash>0){ctx.save();ctx.globalAlpha=Math.min(.55,f.flash/14);ctx.fillStyle='#fff';ctx.beginPath();ctx.ellipse(0,-94,35,52,0,0,Math.PI*2);ctx.fill();ctx.restore()}
+ if(f.stun>0){ctx.fillStyle='#ffd85a';for(let i=0;i<3;i++){let a=frame*.15+i*2.1;ctx.beginPath();ctx.arc(Math.cos(a)*25,-181+Math.sin(a)*5,3.5,0,Math.PI*2);ctx.fill()}}
+ if(f.hasChair||f.weaponTimer>0){ctx.save();ctx.translate(49,-75);ctx.rotate(.3);drawWeaponIcon(f.weaponType||'chair',0,0,1.32);ctx.restore()}
+ if(f.onTopRope){ctx.save();ctx.globalAlpha=.9;ctx.strokeStyle='#ffce55';ctx.lineWidth=3;ctx.beginPath();ctx.arc(0,-183,27,0,Math.PI*2);ctx.stroke();ctx.restore()}
+ ctx.restore();ctx.restore();
+ text(inf.name,f.x,floor-192-f.air,15,inf.trim,'center','900','Arial,sans-serif');
+}
+function drawReferee(){
+ if(!player||!enemy)return;
+ // Full-height referee uses the same ~165 px head-to-boot scale as the wrestlers.
+ // The striped shirt, trousers, limbs and head are drawn in the same coordinate space as drawFighter().
+ ctx.save();ctx.translate(refX,refY);ctx.globalAlpha=.99;
+ const counting=(state==='pin'||state==='submission');
+ const sway=counting?0:Math.sin(frame*.045)*.02;
+ ctx.fillStyle='rgba(0,0,0,.30)';ctx.beginPath();ctx.ellipse(0,3,28,7,0,0,Math.PI*2);ctx.fill();
+ ctx.save();ctx.rotate(sway);
+ const limb=(x1,y1,x2,y2,w,color)=>{ctx.strokeStyle=color;ctx.lineWidth=w;ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke()};
+ const joint=(x,y,r,color)=>{ctx.fillStyle=color;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill()};
+ // Black trousers and articulated knees/boots are wrestler-sized, rather than a tiny referee icon.
+ limb(-10,-61,-13,-34,14,'#171923');limb(-13,-34,-18,-8,11,'#171923');
+ limb(10,-61,13,-34,14,'#171923');limb(13,-34,18,-8,11,'#171923');
+ joint(-13,-34,7,'#20232d');joint(13,-34,7,'#20232d');
+ ctx.fillStyle='#080a10';ctx.beginPath();ctx.roundRect(-29,-10,20,10,4);ctx.roundRect(9,-10,20,10,4);ctx.fill();
+ ctx.fillStyle='#c7ccd6';ctx.fillRect(-25,-9,12,3);ctx.fillRect(13,-9,12,3);
+ // Neck and broad referee shirt: its silhouette matches the wrestlers' torso proportions.
+ ctx.fillStyle='#d2a080';ctx.beginPath();ctx.roundRect(-7,-126,14,18,4);ctx.fill();
+ ctx.fillStyle='#e9edf5';ctx.beginPath();ctx.moveTo(-18,-111);ctx.lineTo(-25,-104);ctx.lineTo(-23,-78);ctx.lineTo(-20,-62);ctx.lineTo(20,-62);ctx.lineTo(23,-78);ctx.lineTo(25,-104);ctx.lineTo(18,-111);ctx.closePath();ctx.fill();
+ // Black vertical referee stripes clipped to the shirt silhouette.
+ ctx.save();ctx.beginPath();ctx.moveTo(-18,-111);ctx.lineTo(-25,-104);ctx.lineTo(-23,-78);ctx.lineTo(-20,-62);ctx.lineTo(20,-62);ctx.lineTo(23,-78);ctx.lineTo(25,-104);ctx.lineTo(18,-111);ctx.closePath();ctx.clip();
+ ctx.fillStyle='#171923';for(let x=-24;x<=24;x+=9)ctx.fillRect(x,-114,4,56);ctx.restore();
+ // Waistband and small official badge.
+ ctx.fillStyle='#090b12';ctx.fillRect(-21,-66,42,6);ctx.fillStyle='#e8c84f';ctx.fillRect(11,-87,5,7);
+ // Arms bend and gesture slightly; hands remain at wrestler-like height.
+ const armWave=counting?8:Math.sin(frame*.08)*5;
+ limb(-20,-103,-31,-83,12,'#d2a080');joint(-31,-83,6,'#c99372');limb(-31,-83,-28,-64+armWave,10,'#d2a080');
+ limb(20,-103,30,-84,12,'#d2a080');joint(30,-84,6,'#c99372');limb(30,-84,27,-66-armWave,10,'#d2a080');
+ // Black wrist trim and open hands.
+ limb(-29,-72,-27,-68,12,'#171923');limb(28,-73,27,-69,12,'#171923');
+ joint(-28,-63+armWave,5,'#d2a080');joint(27,-65-armWave,5,'#d2a080');
+ // Head, ears, hairline, eyes and whistle.
+ ctx.fillStyle='#d2a080';ctx.beginPath();ctx.ellipse(0,-139,17,21,0,0,Math.PI*2);ctx.fill();
+ joint(-16,-139,3,'#bd8969');joint(16,-139,3,'#bd8969');
+ ctx.fillStyle='#25232a';ctx.beginPath();ctx.ellipse(0,-156,17,10,0,Math.PI,Math.PI*2);ctx.fill();ctx.fillRect(-16,-156,4,11);ctx.fillRect(12,-156,4,11);
+ ctx.fillStyle='#27202a';ctx.fillRect(-9,-141,4,2);ctx.fillRect(5,-141,4,2);ctx.strokeStyle='#774838';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(-4,-132);ctx.lineTo(4,-132);ctx.stroke();
+ ctx.strokeStyle='#d5d9e3';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(0,-122);ctx.lineTo(3,-115);ctx.stroke();ctx.fillStyle='#e9c750';ctx.beginPath();ctx.arc(3,-114,3,0,Math.PI*2);ctx.fill();
+ ctx.restore();ctx.restore();
+}
+function drawCommentary(){
+ // Broadcast panel stays above the ring-side props so all nine weapons remain visible and reachable.
+ const y=198;rounded(355,y,570,33,8,'rgba(4,8,18,.88)','#465171',1);text('COMMENTARY • GRAVITY BROADCAST',370,y+10,8,'#ffce55','left','900');text(commentaryLine,640,y+23,12,'#f0f3ff','center','bold');
+ rounded(1002,184,226,53,5,'rgba(5,8,16,.94)','#636b86',1);text('PLAY-BY-PLAY  •  COLOR',1115,195,8,'#ffce55','center','900');
+ for(let i=0;i<2;i++){const x=1064+i*92;ctx.fillStyle=i?'#b77f5c':'#d3a17d';ctx.beginPath();ctx.arc(x,209,7,0,Math.PI*2);ctx.fill();ctx.fillStyle=i?'#273754':'#20232e';ctx.fillRect(x-8,216,16,9);ctx.strokeStyle='#f4f4f6';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x-8,218);ctx.lineTo(x+8,223);ctx.moveTo(x+8,218);ctx.lineTo(x-8,223);ctx.stroke();}
+}
+function drawHUD(){
+ const panels=[{f:player,x:36,align:'left',color:'#35dfe9',label:localMode?'P1':'PLAYER 1'},{f:enemy,x:1244,align:'right',color:'#ff475b',label:localMode?'P2':'OPPONENT'}];
+ for(let p of panels){if(!p.f)continue;let f=p.f,left=p.align==='left'?p.x:p.x-390;rounded(left,25,390,124,12,'rgba(7,10,24,.93)','#5a6385',2);text(f.info.name,left+18,47,23,'#fff','left','900','Impact,Arial Narrow,sans-serif');text('OVR '+f.info.rating,left+370,47,14,p.color,'right','bold');
+ let bx=left+18,by=63,bw=354;rounded(bx,by,bw,18,6,'#20243a');
+ // Three smooth 100-point health stages with a short damage-glide, sports-game style.
+ const hp=clamp(f.displayHp??f.hp,0,300),seg=(bw-8)/3;
+ const remain=[clamp((hp-200)/100,0,1),clamp((hp-100)/100,0,1),clamp(hp/100,0,1)];
+ const colors=['#37db76','#ffd344','#f04452'],tracks=['#173727','#443a15','#481d28'];
+ for(let i=0;i<3;i++){
+  const sx=bx+i*(seg+4);rounded(sx,by,seg,18,5,tracks[i]);
+  if(remain[i]>0){ctx.save();if((f.healthFlash||0)>0){ctx.shadowColor=colors[i];ctx.shadowBlur=10*(f.healthFlash/18)}const fill=ctx.createLinearGradient(sx,by,sx,by+18);fill.addColorStop(0,colors[i]);fill.addColorStop(1,i===0?'#188e4f':i===1?'#bc8c16':'#a61f35');rounded(sx,by,seg*remain[i],18,5,fill);ctx.restore();}
+  // fine tick marks make the three health stages easy to read at a glance.
+  ctx.save();ctx.strokeStyle='rgba(255,255,255,.18)';ctx.lineWidth=1;for(let k=1;k<5;k++){const tx=sx+seg*k/5;ctx.beginPath();ctx.moveTo(tx,by+3);ctx.lineTo(tx,by+15);ctx.stroke()}ctx.restore();
+ }
+ text('HP  '+Math.ceil(hp)+' / 300',bx+7,by+9,10,'#ffffff','left','900');
+ rounded(bx,by+25,bw,8,4,'#20243a');if(f.stamina>0)rounded(bx,by+25,bw*f.stamina/100,8,4,'#f6ce58');text('STAMINA',bx,by+45,9,'#cbd1e8','left','bold');
+ rounded(bx,by+52,bw,8,4,'#20243a');if(f.finisher>0)rounded(bx,by+52,bw*clamp(f.finisher,0,100)/100,8,4,'#bd71ff');text('FINISHER '+Math.floor(f.finisher)+'%',bx,by+68,9,'#e6ceff','left','bold');
+ if(f.down>0){let secs=Math.ceil(f.down/60);text('GETTING UP '+secs+'s',left+195,by+91,10,'#ffda70','center','900')}
+ }
+ rounded(548,24,184,49,12,'rgba(7,10,24,.9)','#575e83',2);text(formatTime(matchTime),640,49,24,'#fff','center','900','Impact,Arial Narrow,sans-serif');
+ rounded(445,78,390,28,8,'rgba(7,10,24,.82)','#454c70',1);text(matchTypes[matchTypeIndex].name+(localMode?' • LOCAL 2P':''),640,92,13,'#ffce55','center','900');
+ if(matchTypeIndex===6)text('STAGES  '+stageWinsPlayer+' - '+stageWinsEnemy+'  •  STAGE '+currentStage+'/3',640,119,12,'#d8e5ff','center','900');
+ if(matchTypeIndex===9)text('GAUNTLET  '+Math.min(5,gauntletWins+1)+'/5',640,119,12,'#d8e5ff','center','900');
+ if(matchTypeIndex===10)text('TAG TEAM • G / NUMPAD 8 / CONTROLLER START TO TAG',640,119,10,'#d8e5ff','center','900');
+ if(matchTypeIndex===0&&ringOutPlayer>0)text('PLAYER 1 RING-OUT COUNT: '+Math.min(10,Math.floor(ringOutPlayer)+1),640,120,11,'#ff8d9b','center','900');
+ if(matchTypeIndex===0&&ringOutEnemy>0)text('OPPONENT RING-OUT COUNT: '+Math.min(10,Math.floor(ringOutEnemy)+1),640,136,11,'#ffce55','center','900');
+ if(gameMode==='career')text('ROAD TO GLORY  W '+careerWins+' / L '+careerLosses,640,136,10,'#aab4d2','center','900');
+ if(noticeTimer>0){ctx.save();ctx.globalAlpha=Math.min(1,noticeTimer/20);rounded(400,155,480,42,12,'rgba(6,9,22,.86)','#555d80',1);text(notice,640,176,20,'#fff','center','900','Impact,Arial Narrow,sans-serif');ctx.restore()}
+ if(crowdMood>0){rounded(510,205,260,30,10,'rgba(8,10,25,.83)','#46e4ef',1);text(crowdChant,640,220,15,'#fff','center','900')}
+ if(controller.connected){rounded(18,146,195,25,7,'rgba(8,10,25,.83)','#4ae4ee',1);text('USB CONTROLLER CONNECTED',115,159,10,'#8ef7ff','center','900')}
+}
+function updateHealthDisplay(f,dt){
+ if(!f)return;const actual=clamp(f.hp,0,300);
+ if(f.lastHealthSeen===undefined)f.lastHealthSeen=actual;
+ if(actual<f.lastHealthSeen-.05)f.healthFlash=18;
+ f.lastHealthSeen=actual;
+ const displayed=f.displayHp===undefined?actual:f.displayHp;
+ f.displayHp=displayed+(actual-displayed)*(1-Math.pow(.925,dt));
+ if(Math.abs(f.displayHp-actual)<.25)f.displayHp=actual;
+ f.healthFlash=Math.max(0,(f.healthFlash||0)-dt);
+}
+function formatTime(sec){let s=Math.max(0,Math.floor(sec));return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`}
+function drawTitleBrand(){ctx.save();ctx.translate(640,63);ctx.transform(1,0,-.10,1,0,0);text('FIGHTER',0,-10,39,'#ffffff','center','900','Impact,Arial Narrow,sans-serif');text('5',0,27,55,'#f04452','center','900','Impact,Arial Narrow,sans-serif');ctx.restore();}
+function drawButton(b){let hov=mouse.x>=b.x&&mouse.x<=b.x+b.w&&mouse.y>=b.y&&mouse.y<=b.y+b.h;rounded(b.x,b.y,b.w,b.h,12,hov?'#e8f7ff':'#10172d',hov?'#fff':(b.stroke||'#3de0ed'),2);if(hov){ctx.save();ctx.globalAlpha=.14;ctx.fillStyle='#42e5f5';ctx.fillRect(b.x,b.y,b.w,b.h);ctx.restore()}text(b.label,b.x+b.w/2,b.y+b.h/2,b.size||24,hov?'#07101d':'#f9fbff','center','900','Impact,Arial Narrow,sans-serif');}
+function enterRosterSelection(isLocal){
+ gameMode='quick';universeTitleMatch=false;localMode=!!isLocal;
+ if(localMode){controllerSide='left';state='devices';setNotice('CHOOSE CONTROLLER / KEYBOARD SIDES',100);return;}
+ selectionSlot='player';rosterCursor=selected;state='select';setNotice('CHOOSE YOUR WRESTLER',100);
+}
+function drawDevices(){
+ drawTitleBrand();text('SIDE SELECTION',640,220,31,'#fff','center','900','Impact,Arial Narrow,sans-serif');text('CHOOSE WHO PLAYS ON EACH SIDE BEFORE PICKING WRESTLERS',640,254,14,'#aab2d1','center','bold');
+ const leftController=controllerSide==='left';
+ rounded(85,292,515,205,16,leftController?'rgba(32,53,73,.95)':'rgba(10,14,30,.95)',leftController?'#48e4ef':'#424b68',leftController?3:1);
+ rounded(680,292,515,205,16,!leftController?'rgba(32,53,73,.95)':'rgba(10,14,30,.95)',!leftController?'#48e4ef':'#424b68',!leftController?3:1);
+ text('LEFT SIDE • PLAYER 1',342,324,19,'#fff','center','900');text(leftController?'USB CONTROLLER':'KEYBOARD',342,367,30,leftController?'#50eaff':'#ffd15a','center','900','Impact,Arial Narrow,sans-serif');text(leftController?'Ucom / USB gamepad':'WASD + J / K / E / F',342,408,15,'#cbd5f3','center','bold');text(leftController?'Controls the left wrestler only':'Controls the left wrestler only',342,438,12,'#8f9ab9','center','bold');
+ text('RIGHT SIDE • PLAYER 2',937,324,19,'#fff','center','900');text(leftController?'KEYBOARD':'USB CONTROLLER',937,367,30,leftController?'#ffd15a':'#50eaff','center','900','Impact,Arial Narrow,sans-serif');text(leftController?'ARROWS + NUMPAD attacks':'Ucom / USB gamepad',937,408,15,'#cbd5f3','center','bold');text(leftController?'Controls the right wrestler only':'Controls the right wrestler only',937,438,12,'#8f9ab9','center','bold');
+ buttons=[
+  {x:150,y:523,w:380,h:50,label:leftController?'✓ CONTROLLER LEFT':'CONTROLLER LEFT',action:()=>{controllerSide='left';},size:19},
+  {x:750,y:523,w:380,h:50,label:!leftController?'✓ CONTROLLER RIGHT':'CONTROLLER RIGHT',action:()=>{controllerSide='right';},size:19},
+  {x:170,y:625,w:220,h:48,label:'BACK',action:()=>{state='menu';localMode=false;},size:18},
+  {x:455,y:615,w:370,h:58,label:'CONTINUE TO ROSTER',action:()=>{selectionSlot='player';rosterCursor=selected;state='select';setNotice('CHOOSE PLAYER 1, THEN PLAYER 2',95);},size:21},
+  {x:890,y:625,w:220,h:48,label:'HOW TO PLAY',action:()=>{pausedFrom='devices';state='help';},size:18}
+ ];buttons.forEach(drawButton);
+ text('CONNECT YOUR USB / UCOM GAMEPAD BEFORE THE MATCH. CONTROLLER INPUT ONLY AFFECTS ITS SELECTED SIDE.',640,710,12,'#8c96b9','center','bold');
+}
+
+function advanceRosterSelection(){
+ if(selectionSlot==='player'){
+  selected=rosterCursor;
+  if(gameMode==='career'){
+   localMode=false;matchTypeIndex=0;opponentIndex=(selected+1+careerWins*7)%roster.length;if(opponentIndex===selected)opponentIndex=(selected+1)%roster.length;
+   setNotice('ROAD TO GLORY: MATCH '+(careerWins+careerLosses+1)+' — SELECT YOUR ARENA!',100);openArenaSelection('match');return;
+  }
+  if(gameMode==='legacy'){
+   localMode=false;matchTypeIndex=9;opponentIndex=(selected+1)%roster.length;setNotice('LEGACY GAUNTLET: FIVE OPPONENTS AWAIT — PICK YOUR ARENA!',100);openArenaSelection('match');return;
+  }
+  if(universeTitleMatch){universeTitleMatch=false;selectionSlot='opponent';rosterCursor=(selected+1)%roster.length;setNotice('CHOOSE A TITLE CHALLENGER',85);return;}
+  selectionSlot=localMode?'player2':'opponent';
+  rosterCursor=opponentIndex;
+  if(rosterCursor===selected)rosterCursor=(selected+1)%roster.length;
+  setNotice(selectionSlot==='player2'?'PLAYER 2: CHOOSE YOUR WRESTLER':'CHOOSE YOUR OPPONENT',95);
+ }else{
+  opponentIndex=rosterCursor;
+  if(opponentIndex===selected){opponentIndex=(selected+1)%roster.length;rosterCursor=opponentIndex;setNotice('CHOOSE A DIFFERENT WRESTLER',70);return}
+  openArenaSelection('match');
+ }
+}
+function openArenaSelection(entry='match'){
+ arenaEntry=entry;arenaCursor=Math.max(0,arenaList.findIndex(a=>a.name===arenaName));
+ arenaReturnSlot=gameMode==='career'||gameMode==='legacy'?'player':selectionSlot;
+ state='arenas';setNotice('CHOOSE YOUR ARENA • '+arenaList.length+' VENUES',75);
+}
+function leaveArenaSelection(){
+ if(arenaEntry==='menu'||arenaEntry==='modes'||arenaEntry==='playModes'){state=arenaEntry;return}
+ state='select';selectionSlot=arenaReturnSlot;
+ if(selectionSlot==='player')rosterCursor=selected;
+ else if(selectionSlot==='player2')rosterCursor=opponentIndex;
+ else rosterCursor=opponentIndex;
+}
+function acceptArenaSelection(){arenaName=arenaList[arenaCursor].name;if(arenaEntry==='menu'||arenaEntry==='modes'||arenaEntry==='playModes'){state=arenaEntry;setNotice('ARENA SELECTED: '+arenaName,80)}else if(arenaEntry==='preview'){state='select';selectionSlot=arenaReturnSlot;if(selectionSlot==='player')rosterCursor=selected;else if(selectionSlot==='player2')rosterCursor=opponentIndex;else rosterCursor=opponentIndex;setNotice('ARENA PREVIEW SELECTED: '+arenaName,80)}else startMatch()}
+function drawArenaSelect(){
+ drawScreenBackground();drawTitleBrand();
+ text('ARENA SELECTION',640,105,28,'#fff','center','900','Impact,Arial Narrow,sans-serif');
+ text('THE LEGACY TOUR  •  CHOOSE THE VENUE FOR YOUR NEXT SHOW',640,132,12,'#aab7d2','center','900');
+ const a=arenaList[arenaCursor]||arenaList[0],page=Math.floor(arenaCursor/15),start=page*15;
+ // Universe-style layout: a large featured venue tile on the left, weekly show tiles below, arena cards on the right.
+ rounded(34,166,425,425,7,'rgba(5,8,20,.96)','#56627e',2);
+ const hero=ctx.createLinearGradient(42,174,450,440);hero.addColorStop(0,a.wallA);hero.addColorStop(.62,a.wallB);hero.addColorStop(1,'#04060d');rounded(42,174,409,278,4,hero,a.accent,2);
+ for(let i=0;i<8;i++){ctx.save();ctx.globalAlpha=.15+Math.sin(frame*.025+i)*.025;ctx.fillStyle=i%2?a.secondary:a.accent;ctx.beginPath();ctx.moveTo(58+i*52,176);ctx.lineTo(22+i*61,438);ctx.lineTo(95+i*52,438);ctx.closePath();ctx.fill();ctx.restore()}
+ // Draw a stylized arena ring inside the featured tile.
+ text('FIGHTER 5',246,215,28,'#fff','center','900','Impact,Arial Narrow,sans-serif');text(a.name,246,246,a.name.length>23?13:17,a.secondary,'center','900');
+ ctx.fillStyle='rgba(0,0,0,.35)';ctx.beginPath();ctx.ellipse(246,383,160,24,0,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#05070d';ctx.beginPath();ctx.moveTo(90,319);ctx.lineTo(396,319);ctx.lineTo(425,410);ctx.lineTo(60,410);ctx.closePath();ctx.fill();
+ ctx.fillStyle='#212638';ctx.beginPath();ctx.moveTo(108,313);ctx.lineTo(382,313);ctx.lineTo(405,394);ctx.lineTo(81,394);ctx.closePath();ctx.fill();
+ ctx.fillStyle=a.matA;ctx.beginPath();ctx.moveTo(127,316);ctx.lineTo(363,316);ctx.lineTo(386,381);ctx.lineTo(101,381);ctx.closePath();ctx.fill();
+ ctx.fillStyle='rgba(14,20,38,.65)';text('F5',246,348,43,'#222b44','center','900','Impact,Arial Narrow,sans-serif');
+ for(let i=0;i<3;i++){ctx.strokeStyle=['#f04452','#f4f6fc','#176dff'][i];ctx.lineWidth=5;const yy=322+i*22;ctx.beginPath();ctx.moveTo(116,yy);ctx.lineTo(378,yy);ctx.stroke();ctx.beginPath();ctx.moveTo(116,yy);ctx.lineTo(81,394);ctx.stroke();ctx.beginPath();ctx.moveTo(378,yy);ctx.lineTo(405,394);ctx.stroke()}
+ rounded(43,463,407,54,'#f1f2f5',a.accent,1);text('SELECT VENUE',58,481,10,'#454c60','left','900');text(a.name,58,500,a.name.length>26?13:16,'#111827','left','900');
+ text(a.sub,246,539,11,a.secondary,'center','900');text('ARENA '+String(arenaCursor+1).padStart(2,'0')+' / '+arenaList.length,246,562,12,'#cbd5f0','center','900');
+ // Three original weekly show tiles echo the layout of the third reference without WWE marks.
+ const shows=[['MONDAY','GRAVITY NIGHT','#f04452'],['WEDNESDAY','NOVA LIVE','#42dceb'],['SUNDAY','SUMMIT SHOW','#c18aff']];
+ shows.forEach((sh,i)=>{const x=34+i*144,y=604,w=136,h=48,active=universeShowNo===i+1;rounded(x,y,w,h,4,active?sh[2]:'rgba(5,8,20,.94)',active?'#fff':'#404a68',active?2:1);text(sh[0],x+w/2,y+13,8,active?'#fff':'#aab4d2','center','900');text(sh[1],x+w/2,y+31,10,'#fff','center','900');buttons.push({x,y,w,h,action:()=>{universeShowNo=i+1;setNotice('SHOW SELECTED: '+sh[1],60)}})});
+ const cols=3,rows=5,cardW=239,cardH=72,gapX=10,gapY=8,startX=486,startY=184;
+ text('CHOOSE A VENUE',startX,startY-19,13,'#fff','left','900');text('PAGE '+(page+1)+' / '+Math.ceil(arenaList.length/15),1238,startY-19,11,'#9ca8c8','right','900');
+ for(let j=0;j<15;j++){
+  const i=start+j;if(i>=arenaList.length)break;const item=arenaList[i],col=j%cols,row=Math.floor(j/cols),x=startX+col*(cardW+gapX),y=startY+row*(cardH+gapY),active=i===arenaCursor;
+  rounded(x,y,cardW,cardH,4,active?'rgba(35,43,70,.98)':'rgba(6,9,20,.95)',active?item.accent:'#39445f',active?3:1);
+  rounded(x+8,y+8,66,cardH-16,3,item.wallB,item.accent,1);
+  // tiny arena/ring pictogram in each tile
+  ctx.fillStyle=item.matA;ctx.beginPath();ctx.moveTo(x+16,y+27);ctx.lineTo(x+65,y+27);ctx.lineTo(x+69,y+54);ctx.lineTo(x+12,y+54);ctx.closePath();ctx.fill();
+  for(let k=0;k<3;k++){ctx.strokeStyle=['#f04452','#f4f6fc','#176dff'][k];ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x+15,y+30+k*7);ctx.lineTo(x+66,y+30+k*7);ctx.stroke()}
+  text(item.name,x+84,y+23,item.name.length>24?9:item.name.length>17?10:12,'#fff','left','900','Impact,Arial Narrow,sans-serif');text(item.sub,x+84,y+42,8,item.secondary,'left','900');
+  if(active){rounded(x+84,y+55,140,4,2,item.accent);text('SELECTED',x+218,y+64,7,'#ffce55','right','900')}
+ }
+ buttons.push(
+  {x:486,y:600,w:145,h:47,label:'◀ PREVIOUS PAGE',action:()=>{arenaCursor=Math.max(0,Math.floor(arenaCursor/15)*15-15)},size:11},
+  {x:641,y:600,w:165,h:47,label:'NEXT PAGE ▶',action:()=>{arenaCursor=Math.min(arenaList.length-1,(Math.floor(arenaCursor/15)+1)*15)},size:12},
+  {x:817,y:600,w:190,h:47,label:'BACK TO SETUP',action:leaveArenaSelection,size:13},
+  {x:1018,y:600,w:207,h:47,label:(arenaEntry==='menu'||arenaEntry==='modes'||arenaEntry==='playModes')?'SAVE ARENA':arenaEntry==='preview'?'USE THIS ARENA':'SELECT & FIGHT',action:acceptArenaSelection,size:15}
+ );buttons.forEach(drawButton);
+ text('ARROWS TO BROWSE • ENTER SELECTS • ESC BACK',855,681,11,'#aab5d2','center','900');
+ text('ARENA LIGHTING • RING MAT • ROPE COLORS • CROWD VIBE CHANGE WITH THE SELECTED VENUE',855,708,9,'#ffce55','center','900');
+}
+function dashPanel(x,y,w,h,titleLabel){
+ ctx.fillStyle='#080b14';ctx.fillRect(x,y,w,h);ctx.strokeStyle='#f1f3fa';ctx.lineWidth=2;ctx.strokeRect(x+1,y+1,w-2,h-2);
+ ctx.fillStyle='rgba(3,5,12,.92)';ctx.fillRect(x+8,y+5,Math.min(w-16,Math.max(72,titleLabel.length*8+18)),24);
+ text(titleLabel,x+15,y+17,15,'#f7f8fd','left','900','Arial Narrow,Arial,sans-serif');
+}
+function drawDashF5(x,y,size=1){ctx.save();ctx.translate(x,y);ctx.scale(size,size);ctx.transform(1,0,-.12,1,0,0);text('F',-11,0,30,'#ffffff','center','900','Impact,Arial Narrow,sans-serif');text('5',10,2,32,'#f04452','center','900','Impact,Arial Narrow,sans-serif');ctx.restore()}
+function drawDashboardRing(x,y,w,h){
+ ctx.save();ctx.translate(x,y);ctx.scale(w/636,h/310);
+ const bg=ctx.createLinearGradient(0,0,0,310);bg.addColorStop(0,'#0d1020');bg.addColorStop(.52,'#191321');bg.addColorStop(1,'#06070d');ctx.fillStyle=bg;ctx.fillRect(0,0,636,310);
+ // Arena lights, stage screens and animated fans.
+ for(let i=0;i<8;i++){ctx.save();ctx.globalAlpha=.12+Math.sin(frame*.025+i)*.035;ctx.fillStyle=i%2?'#1b8eff':'#ff304d';ctx.beginPath();ctx.moveTo(58+i*74,0);ctx.lineTo(10+i*82,177);ctx.lineTo(122+i*74,177);ctx.closePath();ctx.fill();ctx.restore()}
+ for(let row=0;row<3;row++)for(let i=0;i<62;i++){const xx=4+i*10+(row%2)*4,yy=58+row*23+Math.sin(i*1.7+row)*2;ctx.fillStyle=['#cc3f50','#d1ad55','#567fd3','#d8d9e8','#35aa90'][Math.abs((i*5+row*7)%5)];ctx.globalAlpha=.22+((i+row)%4)*.06;ctx.beginPath();ctx.arc(xx,yy,2.5+(row%2),0,Math.PI*2);ctx.fill()}ctx.globalAlpha=1;
+ rounded(215,15,363,73,4,grad(215,15,363,73,'#6e0920','#080811'),'#f04452',2);text('FIGHTER 5',396,47,31,'#fff','center','900','Impact,Arial Narrow,sans-serif');text('GRAVITY • MAIN EVENT',396,70,10,'#ffbdca','center','900');
+ // Perspective ring, side apron and mat.
+ ctx.fillStyle='rgba(0,0,0,.5)';ctx.beginPath();ctx.ellipse(327,258,285,31,0,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#090b12';ctx.beginPath();ctx.moveTo(85,151);ctx.lineTo(512,151);ctx.lineTo(590,263);ctx.lineTo(28,263);ctx.closePath();ctx.fill();
+ ctx.fillStyle='#222632';ctx.beginPath();ctx.moveTo(98,143);ctx.lineTo(501,143);ctx.lineTo(566,243);ctx.lineTo(51,243);ctx.closePath();ctx.fill();
+ ctx.fillStyle='#10131c';ctx.beginPath();ctx.moveTo(123,123);ctx.lineTo(481,123);ctx.lineTo(527,217);ctx.lineTo(76,217);ctx.closePath();ctx.fill();
+ ctx.fillStyle=grad(120,128,365,86,arenaTheme().matA,arenaTheme().matB);ctx.beginPath();ctx.moveTo(128,129);ctx.lineTo(476,129);ctx.lineTo(517,211);ctx.lineTo(86,211);ctx.closePath();ctx.fill();
+ ctx.save();ctx.globalAlpha=.55;ctx.translate(306,169);ctx.transform(1,0,-.22,1,0,0);text('F5',0,0,46,'#101828','center','900','Impact,Arial Narrow,sans-serif');ctx.restore();
+ const p=[[122,127],[481,127],[76,218],[527,218]];
+ for(let r=0;r<3;r++){ctx.strokeStyle=['#ed263f','#f3f5fb','#146bff'][r];ctx.lineWidth=4;const yy=134+r*29;ctx.beginPath();ctx.moveTo(121,yy);ctx.lineTo(481,yy);ctx.stroke();ctx.beginPath();ctx.moveTo(121,yy);ctx.lineTo(76,218);ctx.stroke();ctx.beginPath();ctx.moveTo(481,yy);ctx.lineTo(527,218);ctx.stroke()}
+ for(const [px,py] of p){ctx.fillStyle='#05060a';ctx.fillRect(px-6,py-23,12,126);ctx.fillStyle='#161a25';rounded(px-11,py-19,22,24,5,'#090b12','#68728b',1);rounded(px-11,py+12,22,24,5,'#090b12','#68728b',1);drawDashF5(px,py+1,.42)}
+ ctx.fillStyle='#06070c';ctx.beginPath();ctx.moveTo(76,218);ctx.lineTo(527,218);ctx.lineTo(590,263);ctx.lineTo(28,263);ctx.closePath();ctx.fill();text('FIGHTER 5 WRESTLING',315,247,17,'#f04452','center','900','Impact,Arial Narrow,sans-serif');
+ rounded(12,10,66,25,4,'rgba(3,5,12,.9)','#fff',1);text('RING',45,23,14,'#fff','center','900');
+ ctx.restore();
+}
+function drawDashboardRopes(){
+ dashPanel(580,315,286,265,'ROPES');
+ const ys=[391,438,485],cols=['#f04452','#f5f6fb','#176dff'];
+ for(let i=0;i<3;i++){ctx.save();ctx.shadowColor=cols[i];ctx.shadowBlur=8;ctx.strokeStyle=cols[i];ctx.lineWidth=9;ctx.beginPath();ctx.moveTo(591,ys[i]);ctx.lineTo(848,ys[i]-1);ctx.stroke();ctx.restore();}
+ ctx.fillStyle='#05070d';ctx.fillRect(790,359,45,171);ctx.strokeStyle='#3d465e';ctx.lineWidth=2;ctx.strokeRect(790,359,45,171);
+ for(const yy of ys){rounded(783,yy-15,50,29,5,'#080a11','#535f7b',1);drawDashF5(807,yy,.42)}
+ text('RED • WHITE • BLUE',720,539,11,'#bfc9e8','center','900');text('ROPES BLOCK MOVEMENT',720,557,10,'#ffce55','center','900');
+}
+function drawWeaponIcon(type,cx,cy,scale=1){
+ ctx.save();ctx.translate(cx,cy);ctx.scale(scale,scale);ctx.lineCap='round';ctx.lineJoin='round';
+ const stroke=(color,width,fn)=>{ctx.strokeStyle=color;ctx.lineWidth=width;ctx.beginPath();fn();ctx.stroke()};
+ switch(type){
+  case 'chair':
+   stroke('#bac4d5',3,()=>{ctx.moveTo(-14,-17);ctx.lineTo(-8,3);ctx.lineTo(-13,17);ctx.moveTo(10,-17);ctx.lineTo(8,3);ctx.lineTo(14,17);ctx.moveTo(-14,-17);ctx.lineTo(10,-17);ctx.moveTo(-8,3);ctx.lineTo(8,3);ctx.moveTo(-12,16);ctx.lineTo(12,16)});stroke('#707e97',4,()=>{ctx.moveTo(-10,-8);ctx.lineTo(9,-8)});break;
+  case 'table':
+   stroke('#b98655',7,()=>{ctx.moveTo(-25,-5);ctx.lineTo(25,-5)});stroke('#d8b18a',3,()=>{ctx.moveTo(-20,-9);ctx.lineTo(20,-9)});stroke('#9e7048',4,()=>{ctx.moveTo(-18,-2);ctx.lineTo(-23,15);ctx.moveTo(18,-2);ctx.lineTo(23,15)});break;
+  case 'ladder':
+   stroke('#c7d0dd',3,()=>{ctx.moveTo(-16,18);ctx.lineTo(-7,-21);ctx.moveTo(15,18);ctx.lineTo(7,-21)});for(let y=-15;y<=13;y+=7)stroke('#8d9aac',2,()=>{ctx.moveTo(-12-y*.1,y);ctx.lineTo(12+y*.1,y)});break;
+  case 'kendo stick':
+   stroke('#b8864f',5,()=>{ctx.moveTo(-24,17);ctx.lineTo(23,-17)});stroke('#e2b476',2,()=>{ctx.moveTo(-20,14);ctx.lineTo(20,-14)});break;
+  case 'baseball bat':
+   stroke('#9e7046',6,()=>{ctx.moveTo(-22,17);ctx.lineTo(17,-12)});stroke('#cba071',10,()=>{ctx.moveTo(9,-6);ctx.lineTo(22,-17)});break;
+  case 'steel steps':
+   ctx.fillStyle='#858e9b';ctx.fillRect(-23,7,46,10);ctx.fillRect(-17,-1,34,9);ctx.fillRect(-10,-9,20,8);ctx.strokeStyle='#c9d0da';ctx.lineWidth=2;ctx.strokeRect(-23,7,46,10);ctx.strokeRect(-17,-1,34,9);ctx.strokeRect(-10,-9,20,8);break;
+  case 'sledgehammer':
+   stroke('#a6784b',5,()=>{ctx.moveTo(-22,17);ctx.lineTo(17,-14)});stroke('#a9b1c0',10,()=>{ctx.moveTo(8,-12);ctx.lineTo(27,-25)});stroke('#e6eaf0',2,()=>{ctx.moveTo(17,-17);ctx.lineTo(29,-29)});break;
+  case 'trash can':
+   ctx.fillStyle='#737f8c';ctx.beginPath();ctx.moveTo(-15,-14);ctx.lineTo(15,-14);ctx.lineTo(11,18);ctx.lineTo(-11,18);ctx.closePath();ctx.fill();ctx.strokeStyle='#c3ccd7';ctx.lineWidth=2;ctx.stroke();stroke('#d8e0e9',2,()=>{ctx.moveTo(-10,-7);ctx.lineTo(9,-7);ctx.moveTo(-10,1);ctx.lineTo(9,1);ctx.moveTo(-9,9);ctx.lineTo(8,9)});ctx.fillStyle='#aeb9c7';ctx.fillRect(-18,-18,36,4);break;
+  case 'broom':
+   stroke('#ad7b4b',4,()=>{ctx.moveTo(-22,-14);ctx.lineTo(15,13)});stroke('#d8b17b',4,()=>{ctx.moveTo(11,11);ctx.lineTo(26,23)});stroke('#c99b62',2,()=>{ctx.moveTo(13,8);ctx.lineTo(17,25);ctx.moveTo(18,11);ctx.lineTo(23,26);ctx.moveTo(22,14);ctx.lineTo(29,26)});break;
+  default: stroke('#c7d0dd',4,()=>{ctx.moveTo(-20,10);ctx.lineTo(20,-10)});
+ }
+ ctx.restore();
+}
+function drawDashboardRoster(){
+ dashPanel(0,315,575,265,'PLAYERS (WRESTLERS)');
+ const ids=[6,7,8,9,10,11];
+ ids.forEach((idx,j)=>{const r=roster[idx]||roster[j],x=8+j*94,y=350,w=90,h=220;rounded(x,y,w,h,2,'#090d17','#384157',1);ctx.save();ctx.translate(x+w/2,492);ctx.scale(1.32,1.32);drawPortrait(r,0,0,false);ctx.restore();text(r.name,x+w/2,548,r.name.length>12?8:9,'#fff','center','900','Impact,Arial Narrow,sans-serif');text('OVERALL '+r.rating,x+w/2,565,8,'#dce4ef','center','900');
+  buttons.push({x,y,w,h,action:()=>{selected=idx;rosterCursor=idx;enterRosterSelection(false)}});
+ });
+}
+function drawDashboardWeapons(){
+ dashPanel(870,315,410,265,'TOOLS / WEAPONS');
+ const props=[['chair','CHAIR'],['table','TABLE'],['ladder','LADDER'],['kendo stick','KENDO STICK'],['baseball bat','BASEBALL BAT'],['steel steps','STEEL STEPS'],['sledgehammer','SLEDGEHAMMER'],['trash can','TRASH CAN'],['broom','BROOM']];
+ props.forEach((p,i)=>{const col=i%3,row=Math.floor(i/3),x=880+col*131,y=349+row*72,w=124,h=66;rounded(x,y,w,h,2,'#070b13','#334058',1);drawWeaponIcon(p[0],x+w/2,y+27,.72);text(p[1],x+w/2,y+57,p[1].length>10?7.5:9,'#f3f5fa','center','900');buttons.push({x,y,w,h,action:()=>setNotice(p[1]+' • AVAILABLE AT RINGSIDE IN WEAPON-PERMITTED MATCHES',80)});});
+}
+function drawDashboardFans(){
+ dashPanel(0,585,415,215,'FANS');
+ const top=614;for(let row=0;row<4;row++){for(let i=0;i<34;i++){const x=5+i*12+(row%2)*5,y=top+row*26+Math.sin(i*.8+frame*.04+row)*2;ctx.strokeStyle='#c5cbe0';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x,y+5);ctx.lineTo(x-5+Math.sin(frame*.07+i)*4,y-5);ctx.moveTo(x,y+5);ctx.lineTo(x+5+Math.cos(frame*.06+i)*4,y-6);ctx.stroke();ctx.fillStyle=['#ca455c','#397fbd','#daa84d','#7e70bc','#b6d5d8'][Math.abs((i*7+row*3)%5)];ctx.beginPath();ctx.arc(x,y,3.8,0,Math.PI*2);ctx.fill();ctx.fillRect(x-4,y+4,8,9)}}
+ const signs=[{x:38,y:690,w:85,t:'F5',c:'#e33a50'},{x:138,y:683,w:108,t:"LET'S GO!",c:'#f7f5ed'},{x:260,y:689,w:126,t:'BEST IN THE WORLD',c:'#e9e9f1'}];
+ signs.forEach((sg,i)=>{ctx.save();ctx.translate(sg.x,sg.y+Math.sin(frame*.04+i)*2);ctx.rotate(i===1?.035:-.025);rounded(0,0,sg.w,28,1,sg.c,'#10131e',2);text(sg.t,sg.w/2,14,sg.t.length>10?8:sg.t.length>6?10:17,i===0?'#fff':'#111522','center','900','Impact,Arial Narrow,sans-serif');ctx.restore()});
+ text('FIGHTER FIVE!  •  OHhh!  •  HIT HIM!',207,749,10,'#ffce55','center','900');
+}
+function drawDashboardArena(){
+ dashPanel(420,585,420,215,'ARENA');
+ const a=arenaTheme();const bg=grad(428,613,404,140,a.wallA,a.wallB);ctx.fillStyle=bg;ctx.fillRect(428,613,404,141);
+ for(let i=0;i<7;i++){ctx.fillStyle=i%2?a.secondary:a.accent;ctx.globalAlpha=.55;ctx.fillRect(438+i*56,618,5,93);ctx.globalAlpha=1}
+ rounded(523,620,209,48,3,grad(523,620,209,48,a.wallA,'#05060c'),a.accent,2);text('FIGHTER 5',627,643,23,'#fff','center','900','Impact,Arial Narrow,sans-serif');
+ ctx.fillStyle='#090b12';ctx.beginPath();ctx.moveTo(495,679);ctx.lineTo(757,679);ctx.lineTo(796,731);ctx.lineTo(461,731);ctx.closePath();ctx.fill();ctx.fillStyle=a.matA;ctx.beginPath();ctx.moveTo(510,682);ctx.lineTo(743,682);ctx.lineTo(772,718);ctx.lineTo(483,718);ctx.closePath();ctx.fill();
+ for(let i=0;i<3;i++){ctx.strokeStyle=['#f04452','#f5f6fb','#176dff'][i];ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(509,685+i*12);ctx.lineTo(744,685+i*12);ctx.stroke()}
+ text(a.name,630,769,a.name.length>23?10:12,a.secondary,'center','900','Impact,Arial Narrow,sans-serif');
+ buttons.push({x:420,y:585,w:420,h:215,action:()=>openArenaSelection('menu')});
+}
+function drawDashboardHUD(){
+ dashPanel(845,585,435,215,'GAMEPLAY HUD (IN GAME)');
+ const p=roster[selected]||roster[0],e=roster[opponentIndex]||roster[2];
+ text(p.name,866,618,11,'#fff','left','900');text('PLAYER 1',866,632,8,'#abb5d0','left','bold');
+ text(e.name,1258,618,11,'#fff','right','900');text('CPU / PLAYER 2',1258,632,8,'#abb5d0','right','bold');
+ const healthBar=(x,y,w,side)=>{const colors=['#37db76','#ffd344','#f04452'];rounded(x,y,w,10,3,'#171e2e');const gap=3,seg=(w-2*gap)/3;for(let i=0;i<3;i++){rounded(x+i*(seg+gap),y,seg,10,2,colors[i]);}ctx.fillStyle=side==='left'?'#36e47b':'#f24859';ctx.fillRect(side==='left'?x:x+w-4,y-2,4,14)};
+ healthBar(866,642,166,'left');healthBar(1090,642,166,'right');
+ rounded(866,657,166,5,2,'#242a40');rounded(866,657,166*.62,5,2,'#bf78ff');rounded(1090,657,166,5,2,'#242a40');rounded(1090,657,166*.78,5,2,'#bf78ff');
+ // Two full-body roster mannequins fighting; motion cycles in idle stance.
+ ctx.save();ctx.translate(1055,759);ctx.scale(.82,.82);drawPortrait(p,0,0,true);ctx.restore();ctx.save();ctx.translate(1168,758);ctx.scale(-.82,.82);drawPortrait(e,0,0,true);ctx.restore();
+ rounded(857,674,166,115,3,'rgba(3,6,13,.92)','#34445f',1);
+ const cmds=[['X','LIGHT ATTACK','#31bdf2'],['Y','HEAVY ATTACK','#ffce55'],['B','GRAPPLE','#f04452'],['A','IRISH WHIP','#39e38c'],['LS','MOVE','#e8edf8']];
+ cmds.forEach((c,i)=>{const yy=687+i*20;ctx.fillStyle=c[2];ctx.beginPath();ctx.arc(871,yy,7,0,Math.PI*2);ctx.fill();text(c[0],871,yy,7,'#101522','center','900');text(c[1],885,yy,9,'#edf2fc','left','900')});
+ text('HP: 3 LAYERS  •  FINISHER BAR  •  PIN / SUBMIT',1134,787,7.5,'#aab5ce','center','900');
+}
+function mainMenuItems(){
+ return [
+  ['PLAY',()=>{state='playModes';setNotice('CHOOSE HOW TO PLAY',75)}],
+  ['MY ROSTER',()=>{state='select';selectionSlot='player';rosterCursor=selected;setNotice('MY ROSTER • BROWSE ALL 408 FIGHTERS',90)}],
+  ['UNIVERSE',()=>state='universe'],
+  ['CREATION SUITE',()=>createOriginalWrestler()],
+  ['ONLINE',()=>setNotice('ONLINE MATCHMAKING IS NOT ENABLED IN THIS OFFLINE BROWSER BUILD',120)],
+  ['OPTIONS',()=>openSettings('menu')],
+  ['EXTRAS',()=>state='modes'],
+  ['EXIT',()=>setNotice('CLOSE THIS BROWSER TAB TO EXIT FIGHTER 5',100)]
+ ];
+}
+function drawMenu(){
+ // Standalone main menu: the game title, a full arena background, one featured wrestler, and the menu only.
+ drawBackdrop();drawRing();drawLights();
+ const side=ctx.createLinearGradient(0,0,430,0);side.addColorStop(0,'rgba(3,5,12,.98)');side.addColorStop(.78,'rgba(3,5,12,.90)');side.addColorStop(1,'rgba(3,5,12,.12)');ctx.fillStyle=side;ctx.fillRect(0,0,455,H);
+ ctx.fillStyle='#f04452';ctx.fillRect(0,0,430,7);ctx.fillStyle='#f7f8fc';ctx.fillRect(0,7,270,2);
+ text('FIGHTER',34,62,51,'#fff','left','900','Impact,Arial Narrow,sans-serif');text('5',235,61,60,'#f04452','left','900','Impact,Arial Narrow,sans-serif');
+ text('WRESTLING',38,105,29,'#f5f7ff','left','900','Impact,Arial Narrow,sans-serif');
+ text('GRAVITY • THE LEGACY TOUR',40,139,12,'#ffce55','left','900');
+ text('408 WRESTLERS  •  22 ARENAS',40,161,10,'#aab5d2','left','900');
+ const items=mainMenuItems();
+ items.forEach((it,i)=>{
+  const x=28,y=197+i*51,w=318,h=42,hover=mouse.x>=x&&mouse.x<=x+w&&mouse.y>=y&&mouse.y<=y+h,active=i===menuIndex;
+  rounded(x,y,w,h,3,hover||active?'#bd0d24':'rgba(6,9,19,.82)',hover||active?'#ff5269':'#333d55',active?2:1);
+  if(active){ctx.fillStyle='#fff';ctx.fillRect(x,y,5,h);}
+  text(i===0?'▶':(['♟','◎','✦','◉','⚙','◆','↪'][i-1]||'•'),x+20,y+h/2,14,hover||active?'#fff':'#bac5dc','center','900');
+  text(it[0],x+43,y+h/2,18,'#fff','left','900','Impact,Arial Narrow,sans-serif');
+  buttons.push({x,y,w,h,action:()=>{menuIndex=i;it[1]()}});
+ });
+ // Featured original wrestler hero; this is a preview, not a static image panel collage.
+ const hero=roster[selected]||roster[0];
+ ctx.save();ctx.translate(854,650);ctx.scale(4.0,4.0);drawPortrait(hero,0,0,true);ctx.restore();
+ rounded(780,180,455,58,8,'rgba(4,7,17,.82)','#505b78',1);
+ text(hero.name,1007,200,24,'#fff','center','900','Impact,Arial Narrow,sans-serif');
+ text('OVERALL '+hero.rating+'  •  '+hero.sub,1007,222,12,hero.trim,'center','900');
+ rounded(890,274,270,35,8,'rgba(5,8,18,.82)','#5a6486',1);text('PRESS PLAY TO ENTER THE SHOW',1025,291,13,'#fff','center','900');
+ rounded(30,630,315,75,6,'rgba(2,4,12,.88)','#414b69',1);
+ text('MENU CONTROLS',45,647,10,'#ffce55','left','900');text('↑ / ↓ NAVIGATE',45,668,12,'#eaf0ff','left','900');text('ENTER SELECT  •  ESC BACK',45,689,11,'#aeb9d4','left','900');
+ rounded(31,735,309,32,5,'rgba(2,4,12,.88)','#414b69',1);text('FIGHTER 5  •  ORIGINAL WRESTLING GAME',185,751,10,'#96a5c8','center','900');
+ if(noticeTimer>0&&notice!=='WELCOME TO FIGHTER 5!'){rounded(475,90,750,32,5,'rgba(2,4,11,.90)','#4b5268',1);text(notice.slice(0,88),850,106,12,'#f0f3fc','center','900')}
+}
+function drawPlayModes(){
+ drawScreenBackground();drawTitleBrand();
+ text('CHOOSE HOW TO PLAY',640,146,31,'#fff','center','900','Impact,Arial Narrow,sans-serif');
+ text('SELECT YOUR MATCH SETUP',640,175,13,'#aab7d2','center','bold');
+ buttons=[
+  {x:165,y:222,w:450,h:76,label:'SINGLE PLAYER VS CPU',action:()=>enterRosterSelection(false),size:24},
+  {x:665,y:222,w:450,h:76,label:'LOCAL MULTIPLAYER',action:()=>enterRosterSelection(true),size:24},
+  {x:165,y:324,w:450,h:62,label:'CAREER • ROAD TO GLORY',action:()=>{gameMode='career';localMode=false;selectionSlot='player';rosterCursor=selected;state='select'},size:19},
+  {x:665,y:324,w:450,h:62,label:'LEGACY GAUNTLET',action:()=>{gameMode='legacy';localMode=false;matchTypeIndex=9;selectionSlot='player';rosterCursor=selected;state='select'},size:19},
+  {x:410,y:421,w:460,h:55,label:'ARENA SELECT • 22 VENUES',action:()=>openArenaSelection('playModes'),size:19},
+  {x:450,y:500,w:380,h:48,label:'BACK TO MAIN MENU',action:()=>state='menu',size:19}
+ ];buttons.forEach(drawButton);
+ text('LOCAL PLAY: ONE KEYBOARD PLAYER + ONE USB / UCOM CONTROLLER, OR TWO KEYBOARD PLAYERS',640,590,12,'#c5cee6','center','900');
+ text('USB CONTROLLER SIDE SELECTION APPEARS BEFORE THE ROSTER',640,618,11,'#ffce55','center','900');
+}
+
+function drawModes(){
+ drawTitleBrand();rounded(245,203,790,75,12,'rgba(6,9,22,.96)','#444d70',1);text('GAME MODES & CUSTOMIZATION',640,232,27,'#fff','center','900','Impact,Arial Narrow,sans-serif');
+ text(`ROAD TO GLORY RECORD: ${careerWins} WINS • ${careerLosses} LOSSES`,640,265,13,'#a8b3d5','center','bold');
+ const aiName=['ROOKIE','STANDARD','ELITE'][aiDifficulty];
+ buttons=[
+  {x:145,y:300,w:465,h:58,label:'ROAD TO GLORY • CAREER',action:()=>{gameMode='career';localMode=false;universeTitleMatch=false;matchTypeIndex=0;selectionSlot='player';rosterCursor=selected;state='select';setNotice('CHOOSE YOUR STAR FOR THE ROAD TO GLORY',85);},size:21},
+  {x:670,y:300,w:465,h:58,label:'UNIVERSE BOOKER • SHOWS + DRAFTS',action:()=>state='universe',size:18},
+  {x:145,y:374,w:465,h:58,label:'F5 LEGACY TOUR • FIVE-MATCH GAUNTLET',action:()=>{gameMode='legacy';localMode=false;matchTypeIndex=9;universeTitleMatch=false;selectionSlot='player';rosterCursor=selected;state='select';setNotice('PICK A WRESTLER FOR THE LEGACY TOUR',85);},size:18},
+  {x:670,y:374,w:465,h:58,label:'CREATE AN ORIGINAL WRESTLER',action:createOriginalWrestler,size:19},
+  {x:145,y:448,w:465,h:58,label:'CPU DIFFICULTY: '+aiName,action:()=>{aiDifficulty=(aiDifficulty+1)%3;setNotice('CPU DIFFICULTY: '+['ROOKIE','STANDARD','ELITE'][aiDifficulty],75);},size:19},
+  {x:670,y:448,w:465,h:58,label:'ARENA SELECT: '+arenaName,action:()=>openArenaSelection('modes'),size:18},
+  {x:385,y:555,w:510,h:52,label:'BACK TO MAIN MENU',action:()=>state='menu',size:20}
+ ];buttons.forEach(drawButton);
+}
+function drawUniverse(){
+ drawTitleBrand();rounded(245,200,790,75,12,'rgba(6,9,22,.96)','#444d70',1);text('UNIVERSE BOOKER',640,225,29,'#fff','center','900','Impact,Arial Narrow,sans-serif');
+ text('RUN SHOWS • BUILD RIVALRIES • DRAFT YOUR ORIGINAL ROSTER',640,254,13,'#aeb6d2','center','bold');
+ const champs=universeChampionIndexes.map((idx,i)=>({name:roster[idx%roster.length].name,show:['GRAVITY','NOVA','SUMMIT'][i]}));
+ for(let i=0;i<3;i++){const x=135+i*345;rounded(x,285,320,102,12,'rgba(9,13,29,.95)',['#ff526a','#42dceb','#c18aff'][i],2);text(champs[i].show+' CHAMPION',x+160,310,13,['#ff7185','#70f4ff','#d4a5ff'][i],'center','900');text(champs[i].name,x+160,345,18,'#fff','center','900');text('TITLE HOLDER',x+160,369,10,'#9ba6c7','center','bold')}
+ rounded(170,405,940,80,12,'rgba(9,13,29,.95)','#465171',1);text('NEXT DRAFT PICK',640,426,12,'#ffce55','center','900');text((roster[universeDraftIndex%roster.length]||roster[0]).name+'  →  '+['GRAVITY','NOVA','SUMMIT'][universeShowMap[universeDraftIndex%roster.length]||0],640,453,22,'#fff','center','900');text(universeDraftLog,640,472,10,'#a5afd0','center','bold');
+ rounded(170,501,940,62,12,'rgba(9,13,29,.95)','#465171',1);text('SHOW #'+universeShowNo+' • '+universeShowNames[(universeShowNo-1)%universeShowNames.length]+' • RIVALRIES TRACKED: '+universeRivalries,640,532,15,'#dce3ff','center','900');
+ buttons=[
+  {x:115,y:586,w:320,h:56,label:'START BOOKED SHOW',action:()=>{gameMode='universe';localMode=false;matchTypeIndex=0;universeTitleMatch=false;selectionSlot='player';rosterCursor=selected;state='select';setNotice('BOOK YOUR MATCH: SELECT BOTH WRESTLERS',85);},size:19},
+  {x:480,y:586,w:320,h:56,label:'DRAFT NEXT WRESTLER',action:()=>{let idx=universeDraftIndex%roster.length;universeShowMap[idx]=(universeShowMap[idx]+1)%3;universeDraftLog=roster[idx].name+' drafted to '+['GRAVITY','NOVA','SUMMIT'][universeShowMap[idx]];universeDraftIndex=(universeDraftIndex+1)%roster.length;setNotice(universeDraftLog,65);},size:18},
+  {x:845,y:586,w:320,h:56,label:'BOOK TITLE MATCH',action:()=>{gameMode='universe';localMode=false;matchTypeIndex=0;selected=universeChampionIndexes[universeShowNo%3];universeTitleMatch=false;selectionSlot='opponent';rosterCursor=(selected+1)%roster.length;state='select';setNotice('CHAMPION: '+roster[selected].name+' — CHOOSE A CHALLENGER',85);},size:18},
+  {x:450,y:665,w:380,h:42,label:'BACK TO GAME MODES',action:()=>state='modes',size:17}
+ ];buttons.forEach(drawButton);
+}
+function createOriginalWrestler(){
+ let raw='';try{raw=window.prompt('Name your original FIGHTER 5 wrestler (up to 22 characters):','YOUR NEW STAR')||''}catch(e){}
+ const name=raw.trim().replace(/\s+/g,' ').slice(0,22).toUpperCase();if(!name){setNotice('CREATION CANCELLED',60);return}
+ let finalName=name;if(roster.some(r=>r.name.toUpperCase()===finalName)){finalName=name+' '+(roster.length+1)}
+ const i=roster.length,c=palette[i%palette.length];roster.push({name:finalName,rating:85,sub:'THE CUSTOM CONTENDER',skin:c[0],gear:c[1],trim:c[2],hair:c[3],hairStyle:(i*7)%23,gearStyle:(i*13)%31,style:styles[i%styles.length],power:.92,division:['OPENWEIGHT','HEAVYWEIGHT','TECHNICAL','FLYWEIGHT'][i%4],show:['GRAVITY','NOVA','SUMMIT'][i%3]});universeShowMap.push(i%3);setNotice(finalName+' ADDED TO YOUR ORIGINAL ROSTER!',100);state='modes';
+}
+
+function drawScreenBackground(){
+ ctx.fillStyle=grad(0,0,W,H,'#080b15','#100810');ctx.fillRect(0,0,W,H);
+ for(let i=0;i<8;i++){ctx.save();ctx.globalAlpha=.07;ctx.fillStyle=i%2?'#1a8fff':'#f04452';ctx.beginPath();ctx.moveTo(75+i*164,0);ctx.lineTo(i*170-40,H);ctx.lineTo(i*170+110,H);ctx.closePath();ctx.fill();ctx.restore()}
+ for(let row=0;row<4;row++)for(let i=0;i<85;i++){const x=i*15+(row%2)*7,y=700+row*24;ctx.fillStyle=['#c93d53','#e1b84a','#5b82d8','#d9ddeb'][Math.abs((i*7+row*5)%4)];ctx.globalAlpha=.16;ctx.beginPath();ctx.arc(x,y,2.5,0,Math.PI*2);ctx.fill()}ctx.globalAlpha=1;
+ ctx.fillStyle='#f04452';ctx.fillRect(0,0,W,4);ctx.fillStyle='#252d43';ctx.fillRect(0,4,W,2);
+}
+function drawSelect(){
+ drawScreenBackground();drawTitleBrand();
+ text('WRESTLER SELECT',640,105,27,'#fff','center','900','Impact,Arial Narrow,sans-serif');
+ const focus=roster[rosterCursor]||roster[0];
+ const leftInfo=(selectionSlot==='player')?focus:(roster[selected]||roster[0]);
+ const rightInfo=(selectionSlot==='opponent'||selectionSlot==='player2')?focus:(roster[opponentIndex]||roster[2]);
+ const leftLabel=selectionSlot==='player'?'PLAYER 1 • SELECT YOUR WRESTLER':'PLAYER 1';
+ const rightLabel=selectionSlot==='player2'?'PLAYER 2 • SELECT YOUR WRESTLER':localMode?'PLAYER 2':'OPPONENT / CPU';
+ // Blue-black selection stage with two large wrestler previews and a VS divider, based on reference image 2.
+ const panelY=135,panelH=265;
+ rounded(28,panelY,535,panelH,'rgba(5,13,29,.96)',leftInfo.trim,2);
+ rounded(717,panelY,535,panelH,'rgba(5,13,29,.96)',rightInfo.trim,2);
+ const leftGrad=ctx.createLinearGradient(28,panelY,563,panelY+panelH);leftGrad.addColorStop(0,'rgba(10,23,45,.98)');leftGrad.addColorStop(1,'rgba(24,8,19,.80)');rounded(32,panelY+4,527,panelH-8,10,leftGrad);
+ const rightGrad=ctx.createLinearGradient(717,panelY,1252,panelY+panelH);rightGrad.addColorStop(0,'rgba(24,8,19,.80)');rightGrad.addColorStop(1,'rgba(10,23,45,.98)');rounded(721,panelY+4,527,panelH-8,10,rightGrad);
+ for(let i=0;i<6;i++){
+  ctx.save();ctx.globalAlpha=.12;ctx.fillStyle=i%2?'#1d8dff':'#f04452';ctx.beginPath();ctx.moveTo(55+i*80,panelY+5);ctx.lineTo(130+i*64,panelY+panelH-5);ctx.lineTo(190+i*68,panelY+5);ctx.closePath();ctx.fill();ctx.restore();
+  ctx.save();ctx.globalAlpha=.12;ctx.fillStyle=i%2?'#f04452':'#1d8dff';ctx.beginPath();ctx.moveTo(745+i*80,panelY+5);ctx.lineTo(820+i*64,panelY+panelH-5);ctx.lineTo(880+i*68,panelY+5);ctx.closePath();ctx.fill();ctx.restore();
+ }
+ text(leftLabel,56,159,13,'#9ce7ff','left','900');text(rightLabel,746,159,13,'#ffb6c2','left','900');
+ // Full-body illustrated portraits; the currently highlighted roster entry is the active preview for its side.
+ ctx.save();ctx.translate(168,355);ctx.scale(2.2,2.2);drawPortrait(leftInfo,0,0,true);ctx.restore();
+ ctx.save();ctx.translate(1114,355);ctx.scale(-2.2,2.2);drawPortrait(rightInfo,0,0,true);ctx.restore();
+ text(leftInfo.name,265,222,25,'#fff','left','900','Impact,Arial Narrow,sans-serif');text('OVERALL '+leftInfo.rating,265,249,16,leftInfo.trim,'left','900');text(leftInfo.sub,265,274,11,'#dbe3f9','left','900');
+ rounded(265,293,225,9,4,'#18213a');rounded(265,293,225*leftInfo.rating/100,9,4,leftInfo.trim);text('STYLE  '+leftInfo.style.toUpperCase(),265,319,10,'#9ca9cc','left','900');
+ text(rightInfo.name,1021,222,25,'#fff','right','900','Impact,Arial Narrow,sans-serif');text('OVERALL '+rightInfo.rating,1021,249,16,rightInfo.trim,'right','900');text(rightInfo.sub,1021,274,11,'#dbe3f9','right','900');
+ rounded(793,293,225,9,4,'#18213a');rounded(793,293,225*rightInfo.rating/100,9,4,rightInfo.trim);text('STYLE  '+rightInfo.style.toUpperCase(),1021,319,10,'#9ca9cc','right','900');
+ rounded(590,221,100,94,15,'rgba(4,7,17,.94)','#5e6a8c',2);text('VS',640,259,37,'#ff4058','center','900','Impact,Arial Narrow,sans-serif');text('FIGHTER 5',640,285,10,'#fff','center','900');
+ // Roster grid: twelve mini-cards per page, six across, as in a fighting-game character-select screen.
+ const perPage=12,startIndex=Math.floor(rosterCursor/perPage)*perPage,page=Math.floor(rosterCursor/perPage)+1,totalPages=Math.ceil(roster.length/perPage);
+ text('ROSTER  •  '+roster.length+' WRESTLERS',32,419,13,'#fff','left','900');
+ text('PAGE '+page+' / '+totalPages+'  •  USE ARROWS OR PAGE BUTTONS',1245,419,10,'#a8b4d2','right','900');
+ const cardW=195,cardH=95,gapX=9,startX=28,startY=434,rowGap=101;
+ for(let j=0;j<perPage;j++){
+  const i=startIndex+j;if(i>=roster.length)break;const r=roster[i],col=j%6,row=Math.floor(j/6),x=startX+col*(cardW+gapX),y=startY+row*rowGap,active=i===rosterCursor;
+  rounded(x,y,cardW,cardH,6,active?'rgba(37,51,82,.98)':'rgba(5,9,21,.94)',active?r.trim:'#34415e',active?3:1);
+  ctx.save();ctx.translate(x+28,y+64);ctx.scale(.73,.73);drawPortrait(r,0,0,active);ctx.restore();
+  text(r.name,x+51,y+29,r.name.length>15?10:r.name.length>11?11:13,'#fff','left','900','Impact,Arial Narrow,sans-serif');
+  text('OVR '+r.rating,x+51,y+48,11,r.trim,'left','900');
+  rounded(x+51,y+60,132,5,3,'#172038');rounded(x+51,y+60,132*r.rating/100,5,3,r.trim);
+  text(active?'SELECTED':r.style.toUpperCase(),x+51,y+79,8,active?'#ffce55':'#94a4c7','left','900');
+ }
+ buttons=[
+  {x:28,y:650,w:150,h:43,label:'BACK',action:()=>{if(selectionSlot!=='player'){selectionSlot='player';rosterCursor=selected}else {state='menu';localMode=false}},size:17},
+  {x:190,y:650,w:185,h:43,label:'◀ PREVIOUS 12',action:()=>{rosterCursor=Math.max(0,Math.floor(rosterCursor/12)*12-12)},size:13},
+  {x:387,y:650,w:185,h:43,label:'NEXT 12 ▶',action:()=>{rosterCursor=Math.min(roster.length-1,(Math.floor(rosterCursor/12)+1)*12)},size:13},
+  {x:584,y:650,w:195,h:43,label:'MATCH: '+matchTypes[matchTypeIndex].short,action:()=>{matchTypeIndex=(matchTypeIndex+1)%matchTypes.length},size:12},
+  {x:791,y:650,w:210,h:43,label:'PREVIEW ARENAS',action:()=>openArenaSelection('preview'),size:13},
+  {x:1013,y:650,w:239,h:43,label:selectionSlot==='player'?'CONFIRM WRESTLER':selectionSlot==='player2'?'START LOCAL MATCH':'CONFIRM OPPONENT',action:advanceRosterSelection,size:15}
+ ];buttons.forEach(drawButton);
+ text(selectionSlot==='player'?'SELECT PLAYER 1  •  THEN CHOOSE PLAYER 2 / CPU OPPONENT':selectionSlot==='player2'?'LOCAL MULTIPLAYER  •  CONFIRM PLAYER 2 TO CHOOSE ARENA':'CHOOSE YOUR OPPONENT  •  SELECTED WRESTLERS APPEAR ABOVE',640,724,12,'#c5cee8','center','900');
+ text('A / ENTER SELECT   •   ESC BACK   •   GREEN / YELLOW / RED HEALTH IN MATCH',640,753,10,'#ffce55','center','900');
+} 
+function drawPortrait(info,x,y,active){
+ // Full-body roster preview: mannequin-like proportions, kit detail, hair shape and subtle idle motion.
+ ctx.save();ctx.translate(x,y);const s=active?.74:.68;ctx.scale(s,s);if(info.gender==='women')ctx.scale(.90,1);
+ const swing=Math.sin(frame*.055+(info.hairStyle||0))*(active?5:2.5),skin=info.skin,gear=info.gear,trim=info.trim;
+ ctx.fillStyle='rgba(0,0,0,.34)';ctx.beginPath();ctx.ellipse(0,47,25,5,0,0,Math.PI*2);ctx.fill();
+ const limb=(x1,y1,x2,y2,w,c)=>{ctx.strokeStyle=c;ctx.lineWidth=w;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke()};
+ // boots and legs
+ limb(-7,7,-11,25+swing*.25,9,gear);limb(-11,25+swing*.25,-13,43,7,'#181b25');limb(7,7,10,25-swing*.25,9,gear);limb(10,25-swing*.25,12,43,7,'#181b25');
+ ctx.fillStyle='#10131d';ctx.beginPath();ctx.roundRect(-21,40+swing*.1,13,7,3);ctx.roundRect(5,40-swing*.1,13,7,3);ctx.fill();ctx.fillStyle=trim;ctx.fillRect(-20,41,8,2);ctx.fillRect(6,41,8,2);
+ // athletic torso / gear
+ ctx.fillStyle=skin;ctx.beginPath();ctx.moveTo(-12,-27);ctx.quadraticCurveTo(-19,-25,-18,-13);ctx.lineTo(-14,7);ctx.quadraticCurveTo(0,12,14,7);ctx.lineTo(18,-13);ctx.quadraticCurveTo(19,-25,12,-27);ctx.closePath();ctx.fill();
+ ctx.fillStyle=gear;ctx.beginPath();ctx.moveTo(-13,-26);ctx.lineTo(13,-26);ctx.lineTo(15,-3);ctx.lineTo(11,8);ctx.lineTo(-11,8);ctx.lineTo(-15,-3);ctx.closePath();ctx.fill();
+ ctx.fillStyle=trim;switch((info.gearStyle||0)%5){case 0:ctx.fillRect(-13,-18,26,3);ctx.fillRect(-11,-9,22,3);break;case 1:ctx.beginPath();ctx.moveTo(-12,-24);ctx.lineTo(12,5);ctx.lineTo(7,5);ctx.lineTo(-12,-18);ctx.fill();break;case 2:ctx.fillRect(-3,-25,6,31);break;case 3:ctx.beginPath();ctx.moveTo(-14,-24);ctx.lineTo(0,-10);ctx.lineTo(14,-24);ctx.lineTo(10,-25);ctx.lineTo(0,-16);ctx.lineTo(-10,-25);ctx.fill();break;default:ctx.fillRect(-10,-20,20,4);ctx.fillRect(-7,-10,14,4)}
+ ctx.fillStyle=gear;ctx.beginPath();ctx.moveTo(-13,5);ctx.lineTo(13,5);ctx.lineTo(11,17);ctx.lineTo(-11,17);ctx.closePath();ctx.fill();ctx.fillStyle=trim;ctx.fillRect(-12,7,24,3);
+ // shoulder, elbow, forearm and fist shapes animate lightly like a boxer warming up.
+ limb(-12,-22,-21,-11,8,skin);limb(-21,-11,-17+swing*.45,-4,7,skin);ctx.fillStyle=trim;ctx.fillRect(-21,-8,7,3);ctx.beginPath();ctx.arc(-17+swing*.45,-3,4,0,Math.PI*2);ctx.fillStyle=skin;ctx.fill();
+ limb(12,-22,20,-12,8,skin);limb(20,-12,17-swing*.45,-4,7,skin);ctx.fillStyle=trim;ctx.fillRect(14,-8,7,3);ctx.beginPath();ctx.arc(17-swing*.45,-3,4,0,Math.PI*2);ctx.fillStyle=skin;ctx.fill();
+ // neck and head
+ ctx.fillStyle=skin;ctx.fillRect(-4,-33,8,10);ctx.beginPath();ctx.ellipse(0,-43,11,13,0,0,Math.PI*2);ctx.fill();ctx.fillStyle='#17141b';ctx.beginPath();ctx.arc(4,-44,1.4,0,Math.PI*2);ctx.fill();
+ const hs=(info.hairStyle||0)%8;ctx.fillStyle=info.hair;
+ if(hs===0){ctx.beginPath();ctx.ellipse(0,-51,11,5,0,Math.PI,Math.PI*2);ctx.fill()}
+ else if(hs===1){ctx.beginPath();ctx.moveTo(-11,-47);ctx.lineTo(-8,-56);ctx.lineTo(-2,-51);ctx.lineTo(2,-58);ctx.lineTo(7,-51);ctx.lineTo(11,-55);ctx.lineTo(11,-46);ctx.closePath();ctx.fill()}
+ else if(hs===2){ctx.fillRect(-3,-58,6,12);ctx.beginPath();ctx.moveTo(-3,-56);ctx.lineTo(0,-63);ctx.lineTo(3,-56);ctx.fill()}
+ else if(hs===3){ctx.beginPath();ctx.ellipse(0,-51,11,5,0,Math.PI,Math.PI*2);ctx.fill();ctx.fillRect(-11,-51,4,15);ctx.fillRect(7,-51,4,15)}
+ else if(hs===4){ctx.beginPath();ctx.ellipse(0,-51,11,5,.2,Math.PI,Math.PI*2);ctx.fill();ctx.beginPath();ctx.moveTo(-8,-52);ctx.lineTo(9,-49);ctx.lineTo(2,-46);ctx.closePath();ctx.fill()}
+ else if(hs===5){ctx.beginPath();ctx.ellipse(0,-51,11,5,0,Math.PI,Math.PI*2);ctx.fill();ctx.beginPath();ctx.ellipse(11,-43,3,10,0,0,Math.PI*2);ctx.fill()}
+ else if(hs===6){ctx.beginPath();ctx.ellipse(0,-52,10,4,0,Math.PI,Math.PI*2);ctx.fill();for(let k=-1;k<=1;k++){ctx.beginPath();ctx.arc(k*6,-53,3,0,Math.PI*2);ctx.fill()}}
+ else{ctx.beginPath();ctx.ellipse(0,-52,10,4,0,Math.PI,Math.PI*2);ctx.fill();ctx.fillRect(-10,-51,3,13);ctx.fillRect(7,-51,3,13)}
+ if((info.gearStyle||0)%9===4){ctx.fillStyle=trim;ctx.fillRect(-9,-43,18,4);ctx.fillStyle='#17141b';ctx.fillRect(-5,-42,3,2);ctx.fillRect(3,-42,3,2)}
+ ctx.restore();
+}
+function openSettings(returnState='menu'){
+ settingsReturnState=returnState;
+ settingsCursor=0;
+ state='settings';
+}
+function saveTouchControlSetting(enabled){
+ touchControlsEnabled=!!enabled;
+ try{localStorage.setItem('fighter5_touch_controls',touchControlsEnabled?'true':'false')}catch(_){}
+ setNotice(touchControlsEnabled?'TOUCHSCREEN CONTROLS ENABLED':'TOUCHSCREEN CONTROLS DISABLED',85);
+}
+function gameIsFullscreen(){return document.fullscreenElement===document.getElementById('gameWrap')||document.webkitFullscreenElement===document.getElementById('gameWrap')}
+function toggleGameFullscreen(){
+ const wrap=document.getElementById('gameWrap');
+ try{
+  if(gameIsFullscreen()){
+   const result=document.exitFullscreen?document.exitFullscreen():(document.webkitExitFullscreen?document.webkitExitFullscreen():null);
+   if(result&&typeof result.catch==='function')result.catch(()=>setNotice('THE BROWSER COULD NOT EXIT FULLSCREEN',100));
+   setNotice('SWITCHING TO WINDOWED VIEW',70);
+   return;
+  }
+  let result=null;
+  if(wrap.requestFullscreen)result=wrap.requestFullscreen({navigationUI:'hide'});
+  else if(wrap.webkitRequestFullscreen)result=wrap.webkitRequestFullscreen();
+  else{setNotice('FULLSCREEN IS NOT SUPPORTED BY THIS BROWSER',110);return;}
+  if(result&&typeof result.then==='function'){
+   result.then(()=>{setNotice('FULLSCREEN ENABLED',70);if(touchMode&&screen.orientation&&screen.orientation.lock)screen.orientation.lock('landscape').catch(()=>{});})
+    .catch(()=>setNotice('FULLSCREEN WAS BLOCKED — USE YOUR BROWSER FULLSCREEN OPTION',120));
+  }else setNotice('FULLSCREEN REQUESTED',70);
+ }catch(_){setNotice('FULLSCREEN WAS BLOCKED BY THE BROWSER',110)}
+}
+document.addEventListener('fullscreenchange',()=>{if(state==='settings')render()});
+function installFighter5App(){
+ if(window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true){
+  setNotice('FIGHTER 5 IS ALREADY INSTALLED',110);return;
+ }
+ if(deferredInstallPrompt){
+  const promptEvent=deferredInstallPrompt;
+  deferredInstallPrompt=null;
+  promptEvent.prompt();
+  promptEvent.userChoice.then(choice=>{
+   setNotice(choice&&choice.outcome==='accepted'?'FIGHTER 5 INSTALL STARTED':'INSTALL CANCELLED',110);
+  }).catch(()=>setNotice('OPEN THE BROWSER MENU TO INSTALL FIGHTER 5',140));
+  return;
+ }
+ const ua=navigator.userAgent||'';
+ const isIOS=/iPad|iPhone|iPod/i.test(ua)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+ if(isIOS){setNotice('SAFARI: TAP SHARE, THEN “ADD TO HOME SCREEN”',200)}
+ else{setNotice('CHROME / EDGE MENU → INSTALL FIGHTER 5 APP',200)}
+}
+window.addEventListener('beforeinstallprompt',event=>{
+ event.preventDefault();deferredInstallPrompt=event;
+});
+window.addEventListener('appinstalled',()=>{
+ deferredInstallPrompt=null;setNotice('FIGHTER 5 INSTALLED!',120);
+});
+function drawSettings(){
+ drawScreenBackground();drawTitleBrand();
+ rounded(205,115,870,620,18,'rgba(8,12,28,.97)','#454f77',2);
+ text('SETTINGS',640,151,32,'#ffce55','center','900','Impact,Arial Narrow,sans-serif');
+ text('PC KEYBOARD AND USB CONTROLLER ALWAYS REMAIN AVAILABLE',640,181,13,'#d8e1fa','center','900');
+ text('Choose whether the match HUD includes a virtual touchscreen controller.',640,202,11,'#94a2c4','center','bold');
+ rounded(265,219,750,70,touchControlsEnabled?'rgba(18,55,47,.95)':'rgba(12,17,35,.96)',touchControlsEnabled?'#41df9a':'#485679',2);
+ text('TOUCHSCREEN CONTROLS',292,243,18,'#fff','left','900','Impact,Arial Narrow,sans-serif');
+ text(touchControlsEnabled?'ON':'OFF',987,243,21,touchControlsEnabled?'#41df9a':'#ff7180','right','900','Impact,Arial Narrow,sans-serif');
+ text(touchControlsEnabled?'Virtual joystick and action buttons are visible in matches.':'Virtual joystick and action buttons are hidden.',292,269,12,'#ced7ee','left','bold');
+ rounded(265,297,750,70,'rgba(12,17,35,.96)',gameIsFullscreen()?'#41df9a':'#485679',2);
+ text('FULLSCREEN',292,321,18,'#fff','left','900','Impact,Arial Narrow,sans-serif');
+ text(gameIsFullscreen()?'ON':'OFF',987,321,21,gameIsFullscreen()?'#41df9a':'#ff7180','right','900','Impact,Arial Narrow,sans-serif');
+ text(gameIsFullscreen()?'The game fills the screen.':'Use the game area fullscreen, if your browser supports it.',292,347,12,'#ced7ee','left','bold');
+ buttons=[
+  {x:265,y:388,w:355,h:50,label:touchControlsEnabled?'TURN TOUCH CONTROLS OFF':'TURN TOUCH CONTROLS ON',action:()=>saveTouchControlSetting(!touchControlsEnabled),size:14,stroke:touchControlsEnabled?'#ff7180':'#41df9a'},
+  {x:650,y:388,w:365,h:50,label:gameIsFullscreen()?'EXIT FULLSCREEN':'ENTER FULLSCREEN',action:toggleGameFullscreen,size:16,stroke:'#46e4ef'},
+  {x:265,y:449,w:355,h:50,label:'INSTALL APP / ADD TO HOME SCREEN',action:installFighter5App,size:13,stroke:'#ffce55'},
+  {x:650,y:449,w:365,h:50,label:'HOW TO PLAY / CONTROL MAP',action:()=>{pausedFrom='settings';state='help'},size:14},
+  {x:465,y:510,w:350,h:50,label:settingsReturnState==='paused'?'BACK TO PAUSE MENU':'BACK TO MAIN MENU',action:()=>state=settingsReturnState,size:16}
+ ];buttons.forEach(drawButton);
+ const focused=settingsCursor>=0&&settingsCursor<buttons.length?buttons[settingsCursor]:null;
+ if(focused){ctx.save();ctx.strokeStyle='#ffce55';ctx.lineWidth=3;ctx.strokeRect(focused.x-3,focused.y-3,focused.w+6,focused.h+6);ctx.restore()}
+ text('PC: use the browser Install option. Android: install prompt. iPhone/iPad: Safari Share → Add to Home Screen.',640,589,10,'#ffce55','center','900');
+ text('Installation requires the game to be hosted on HTTPS, such as Render or Vercel.',640,615,11,'#aab7d2','center','bold');
+}
+function drawHelp(){drawTitleBrand();rounded(125,215,1030,510,18,'rgba(8,12,28,.96)','#454f77',2);text('HOW TO PLAY',640,286,30,'#ffce55','center','900','Impact,Arial Narrow,sans-serif');
+ const lines=[['KEYBOARD LEFT','A/D move • ↑/↓ depth • W/SPACE jump • J quick • H kick • K heavy'],['KEYBOARD ACTIONS','E grapple • R Irish whip • C climb/dive • X exit/enter • G tag'],['OTHER ACTIONS','F finisher (2-minute charge) • P pin • U submission • L weapon • T taunt'],['RIGHT ACTIONS','1/2/3 attack • 4 kick • * whip • + climb • − exit • / weapon • Enter finisher • 8 tag'],['USB GAMEPAD','A jump/kick • X quick • Y heavy • B grapple • LB pin • RB weapon • LT submit'],['GAMEPAD EXTRAS','RT finisher • Back kick • Start tag • L3 whip • R3 climb • D-pad Up exit'],['MOBILE TOUCH','Drag the left analog pad; tap X quick, Y heavy, A kick, B grapple'],['MOBILE ACTIONS','Touch utility buttons for pin, sub, finisher, weapon, whip, jump and tag'],['DISPLAY','OPTIONS → ENTER FULLSCREEN, if supported by your browser'],['ROPE RULE','Ropes block movement; EXIT/ENTER RING near an edge'],['RINGSIDE PROPS','Nine large carryable weapons; enter the ring while holding one'],['WEAPON RULES','Illegal weapon hit = DQ; No-DQ / Falls Anywhere / Street Fight allow tools'],['HEALTH STAGES','3 layers, 100 HP each: green → yellow → red'],['MATCH TYPES','Inferno Fire • Tag Team • Street Fight • Last Wrestler Standing'],['REFEREE','Singles count-out: 10 • Last Wrestler Standing counts any knockdown'],['KICKOUT','Press J / SPACE / controller button at the moving green spot'],['AI','Elite CPU chases, counters, tags, pins and submits'],['WOMEN','Original women’s roster with different hair and gear']];
+ lines.forEach((l,i)=>{let yy=270+i*27;text(l[0],220,yy,12,'#63e8f2','left','900');text(l[1],495,yy,12,'#f2f5ff','left','bold')});buttons=[{x:500,y:687,w:280,h:34,label:'BACK',action:()=>{state=pausedFrom==='devices'?'devices':pausedFrom==='settings'?'settings':'menu';},size:20}];buttons.forEach(drawButton);}
+function drawEntrance(){drawBackdrop();drawRing();drawLights();if(matchTypeIndex===10){if(playerPartner)drawFighter(playerPartner);if(enemyPartner)drawFighter(enemyPartner)}drawFighter(player);drawFighter(enemy);drawReferee();drawCommentary();ctx.save();ctx.fillStyle='rgba(3,5,14,.56)';ctx.fillRect(0,0,W,H);ctx.restore();let firstPhase=entranceTimer>=110,f=firstPhase?player:enemy;let label=firstPhase?`INTRODUCING ${player.info.name}`:`AND THEIR OPPONENT ${enemy.info.name}`;text(label,640,332,34,'#fff','center','900','Impact,Arial Narrow,sans-serif');text('WALKING TO THE RING • THE CROWD IS READY',640,383,17,f.info.trim,'center','bold');for(let i=0;i<18;i++){let a=frame*.12+i*2.4;ctx.fillStyle=f.info.trim;ctx.globalAlpha=.7;ctx.beginPath();ctx.arc(640+Math.cos(a)*rand(120,350),400+Math.sin(a)*rand(20,130),rand(2,6),0,Math.PI*2);ctx.fill()}ctx.globalAlpha=1;text('FIGHTER 5',640,480,54,'#ffce55','center','900','Impact,Arial Narrow,sans-serif');if(matchTypeIndex===6)text('STAGE '+currentStage+' OF 3',640,535,18,'#fff','center','900');if(matchTypeIndex===9)text('GAUNTLET '+(gauntletWins+1)+' OF 5',640,535,18,'#fff','center','900');}
+function drawResult(){drawBackdrop();drawRing();drawLights();drawFighter(player);drawFighter(enemy);ctx.fillStyle='rgba(2,4,13,.78)';ctx.fillRect(0,0,W,H);text(matchTypes[matchTypeIndex].name+' • '+finishReason,640,260,20,'#ffcf52','center','900','Impact,Arial Narrow,sans-serif');text(state==='win'?player.info.name+' WINS!':state==='lose'?enemy.info.name+' WINS!':'MATCH DRAW',640,330,58,'#fff','center','900','Impact,Arial Narrow,sans-serif');text('VICTORY BY '+(state==='win'?'PIN / SUBMISSION':state==='lose'?'PIN / SUBMISSION':'DECISION'),640,390,16,'#9ba7cf','center','bold');buttons=[{x:390,y:485,w:230,h:60,label:'REMATCH',action:startMatch,size:23},{x:640,y:485,w:250,h:60,label:'MAIN MENU',action:()=>{state='menu';localMode=false;buttons=[];stopCrowdChants()},size:23}];buttons.forEach(drawButton);}
+function drawPause(){ctx.fillStyle='rgba(2,4,12,.7)';ctx.fillRect(0,0,W,H);rounded(405,220,470,380,18,'rgba(10,14,32,.98)','#4b5b81',3);text('MATCH PAUSED',640,270,34,'#ffce55','center','900','Impact,Arial Narrow,sans-serif');buttons=[{x:485,y:305,w:310,h:48,label:'RESUME',action:()=>state='match',size:22},{x:485,y:365,w:310,h:48,label:'RESTART MATCH',action:startMatch,size:19},{x:485,y:425,w:310,h:48,label:'SETTINGS',action:()=>openSettings('paused'),size:19},{x:485,y:485,w:310,h:48,label:'MAIN MENU',action:()=>state='menu',size:18}];buttons.forEach(drawButton);}
+function startMatch(){
+ if(roster.length<408)setNotice('ROSTER LOADED: '+roster.length,50);
+ if(!Number.isInteger(selected))selected=0;
+ if(!Number.isInteger(opponentIndex)||opponentIndex===selected)opponentIndex=(selected+1)%roster.length;
+ player=makeFighter(roster[selected],460,'player',615);enemy=makeFighter(roster[opponentIndex],820,localMode?'player2':'enemy',615);player.inRing=false;enemy.inRing=false;player.face=1;enemy.face=-1;player.moveAmount=enemy.moveAmount=.8;
+ playerPartner=enemyPartner=null;tagCooldownPlayer=tagCooldownEnemy=0;
+ if(matchTypeIndex===10){playerPartner=makeFighter(roster[(selected+12)%roster.length],145,'partner-player',615);enemyPartner=makeFighter(roster[(opponentIndex+15)%roster.length],1135,'partner-enemy',615);playerPartner.inRing=false;enemyPartner.inRing=false;playerPartner.face=1;enemyPartner.face=-1;}
+ chairs=makeRingsideProps();ringOutPlayer=ringOutEnemy=0;refX=640;refY=430;commentaryLine='The teams are making their way to the ring!';commentaryTimer=360;
+ stageWinsPlayer=0;stageWinsEnemy=0;currentStage=1;gauntletWins=0;
+ state='entrance';entranceTimer=220;matchTime=0;notice=localMode?(controllerSide==='left'?'CONTROLLER LEFT • KEYBOARD RIGHT!':'KEYBOARD LEFT • CONTROLLER RIGHT!'):'THE MATCH IS ABOUT TO BEGIN!';noticeTimer=110;submission=0;pinCount=0;pinTimer=0;pinSide='';finishReason='';roundIntro=0;lastStandPlayer=0;lastStandEnemy=0;startMusic();startCrowdChants();
+}
+function completeMatch(side,reason){
+ if(matchTypeIndex===6){
+  if(side==='player')stageWinsPlayer++;else stageWinsEnemy++;
+  if(stageWinsPlayer<2&&stageWinsEnemy<2){currentStage++;const pi=player.info,ei=enemy.info,es=enemy.side;player=makeFighter(pi,420,'player',410);enemy=makeFighter(ei,860,es,410);player.face=1;enemy.face=-1;playerPartner=enemyPartner=null;chairs=makeRingsideProps();matchTime=0;submission=0;pinCount=0;pinTimer=0;pinSide='';roundIntro=0;state='entrance';entranceTimer=155;setNotice('STAGE '+(currentStage-1)+' TO '+side.toUpperCase()+'! NEXT STAGE BEGINS!',100);startMusic();startCrowdChants();return;
+  }
+  side=stageWinsPlayer>stageWinsEnemy?'player':'enemy';reason='THREE STAGES • P1 '+stageWinsPlayer+' – P2 '+stageWinsEnemy;
+ }
+ if(matchTypeIndex===9&&side==='player'&&gauntletWins<4){
+  gauntletWins++;let next=(opponentIndex+7+gauntletWins*3)%roster.length;if(next===selected)next=(next+1)%roster.length;opponentIndex=next;
+  const pi=player.info;player=makeFighter(pi,420,'player',410);player.hp=235;player.stamina=75;enemy=makeFighter(roster[opponentIndex],860,localMode?'player2':'enemy',410);player.face=1;enemy.face=-1;playerPartner=enemyPartner=null;chairs=makeRingsideProps();matchTime=0;submission=0;pinCount=0;pinTimer=0;pinSide='';state='entrance';entranceTimer=155;setNotice('GAUNTLET '+(gauntletWins+1)+'/5 — NEXT OPPONENT: '+enemy.info.name,110);startMusic();startCrowdChants();return;
+ }
+ state=side==='player'?'win':'lose';finishReason=reason;stopMusic();stopCrowdChants();
+ if(gameMode==='career'){if(side==='player')careerWins++;else careerLosses++;}
+ if(gameMode==='universe'){universeShowNo++;universeRivalries++;}
+}
+function insideRing(f){return !!f&&f.inRing===true}
+function outsideRing(f){return !!f&&f.inRing===false}
+function clampFighterSpace(f){if(!f)return;if(matchTypeIndex===3){f.inRing=true;f.x=clamp(f.x,270,1000);f.y=clamp(f.y,298,468);return}if(f.inRing){f.x=clamp(f.x,280,992);f.y=clamp(f.y,298,455)}else{f.x=clamp(f.x,95,1175);f.y=clamp(f.y,500,635)}}
+function dropChair(f){if(!f?.hasChair)return;chairs.push({x:clamp(f.x,95,1175),y:clamp(Math.max(f.y,535),535,625),type:f.weaponType||'chair',available:true});f.hasChair=false;f.weaponType=null}
+function toggleRingSide(f){if(!f)return;if(f.down>0||f.stun>0||f.onTopRope){setNotice('GET BACK ON YOUR FEET BEFORE USING THE ROPES!',55);return}if(matchTypeIndex===3){setNotice('STEEL CAGE: YOU CANNOT LEAVE THE CAGE!',65);return}
+ if(f.inRing){const edges=[{name:'left',d:f.x-280},{name:'right',d:992-f.x},{name:'back',d:f.y-298},{name:'front',d:455-f.y}].sort((a,b)=>a.d-b.d);const edge=edges[0];if(edge.d>38){setNotice('MOVE CLOSE TO THE ROPES, THEN PRESS EXIT RING.',60);return}
+  if(edge.name==='left'){f.x=205;f.y=clamp(f.y+90,520,615)}else if(edge.name==='right'){f.x=1060;f.y=clamp(f.y+90,520,615)}else{f.y=520;f.x=clamp(f.x,260,1020)}f.inRing=false;f.onTopRope=false;f.climbTimer=0;f.air=0;f.vy=0;setNotice(f.info.name+' EXITS THE RING!',60);commentate(f.info.name+' heads to ringside.');return}
+ if(!(f.y<=635&&(f.x<430||f.x>850||f.y<570))){setNotice('MOVE TO THE RING APRON TO CLIMB BACK IN.',60);return}f.inRing=true;f.x=clamp(f.x,300,970);f.y=435;f.air=0;f.vy=0;f.onTopRope=false;setNotice(f.info.name+' CLIMBS BACK INTO THE RING!',60);commentate(f.info.name+' returns to the ring.')} 
+function tagTeamSwap(side){
+ if(matchTypeIndex!==10){setNotice('TAG SWAPS ARE ONLY AVAILABLE IN TAG TEAM MATCHES.',55);return}
+ const isP1=side==='player',active=isP1?player:enemy,partner=isP1?playerPartner:enemyPartner;
+ if(!active||!partner||partner.hp<=0){setNotice('YOUR TAG PARTNER CANNOT CONTINUE!',55);return}
+ if(active.down>0||active.stun>0||active.onTopRope||!active.inRing){setNotice('GET BACK IN THE RING AND STAND UP BEFORE TAGGING.',55);return}
+ const cooldown=isP1?tagCooldownPlayer:tagCooldownEnemy;if(cooldown>0){setNotice('TAG TEAMMATE NEEDS A MOMENT BEFORE THE NEXT TAG.',45);return}
+ const oldX=active.x,oldY=active.y,oldFace=active.face;
+ active.x=isP1?145:1135;active.y=615;active.inRing=false;active.onTopRope=false;active.climbTimer=0;active.whipTimer=0;active.weaponTimer=0;active.side=isP1?'partner-player':'partner-enemy';
+ partner.x=oldX;partner.y=oldY;partner.inRing=true;partner.face=oldFace;partner.onTopRope=false;partner.climbTimer=0;partner.side=side;partner.tagCooldown=110;
+ if(isP1){player=partner;playerPartner=active;tagCooldownPlayer=600}else{enemy=partner;enemyPartner=active;tagCooldownEnemy=600}
+ commentate((isP1?player.info.name:enemy.info.name)+' tags in a fresh partner!',true);setNotice('TAG! FRESH PARTNER ENTERS THE MATCH!',75);sfx(330,.18,.06,'triangle');
+}
+function canAttemptFinish(f,other,kind='pin'){
+ if(matchTypeIndex===4){setNotice('LAST WRESTLER STANDING: REFEREE COUNTS TO TEN — NO PINS OR SUBMISSIONS.',70);return false}
+ if(matchTypeIndex===7&&kind==='pin'){setNotice('SURRENDER MATCH: USE A SUBMISSION, NOT A PIN!',70);return false}
+ if(matchTypeIndex===2)return true;
+ if(matchTypeIndex===8){if(outsideRing(f)&&outsideRing(other))return true;setNotice('RINGSIDE SHOWDOWN: TAKE BOTH WRESTLERS OUTSIDE!',70);return false}
+ if(!insideRing(f)||!insideRing(other)){setNotice('BRING THEM BACK INSIDE THE RING!',70);return false}
+ return true;
+}
+function checkRingsideRule(f,other){if(matchTypeIndex!==8)return true;if(outsideRing(f)&&outsideRing(other))return true;setNotice('RINGSIDE SHOWDOWN: TAKE BOTH WRESTLERS OUTSIDE TO PIN OR SUBMIT.',70);return false}
+function startCrowdChants(){
+ if(crowdTimer)clearInterval(crowdTimer);
+ const chants=['Fighter Five! Fighter Five!','Let them fight!','This is awesome!','Hit him! Hit him!','Ohhh!','Fight forever!','One more time!','You can do it!'];let ci=0;
+ crowdChant=chants[ci%chants.length];crowdChantTimer=240;
+ crowdTimer=setInterval(()=>{if(!['match','entrance','pin','submission'].includes(state))return;crowdChant=chants[ci++%chants.length];crowdMood=95;crowdChantTimer=160;
+  if('speechSynthesis' in window&&typeof SpeechSynthesisUtterance!=='undefined'){try{window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(crowdChant);u.rate=1.05;u.pitch=.8;u.volume=.6;window.speechSynthesis.speak(u)}catch(e){}}
+ },8000);
+}
+function stopCrowdChants(){if(crowdTimer)clearInterval(crowdTimer);crowdTimer=null;if('speechSynthesis' in window)try{window.speechSynthesis.cancel()}catch(e){}}
+function startMusic(){try{if(!audioCtx)audioCtx=new (window.AudioContext||window.webkitAudioContext)();if(audioCtx.state==='suspended')audioCtx.resume();musicOn=true;if(musicTimer)clearInterval(musicTimer);musicStep=0;const playNote=(freq,dur,vol,type='sawtooth')=>{let o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type=type;o.frequency.value=freq;g.gain.setValueAtTime(vol,audioCtx.currentTime);g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+dur);o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+dur)};musicTimer=setInterval(()=>{if(!musicOn||!audioCtx)return;const seq=[110,0,164.8,0,196,0,146.8,0,110,0,220,0,196,0,164.8,0];let n=seq[musicStep%seq.length];if(n)playNote(n,.18,.035,'triangle');if(musicStep%4===0)playNote(55,.11,.05,'sine');musicStep++},180)}catch(e){musicOn=false}}
+function stopMusic(){musicOn=false;if(musicTimer)clearInterval(musicTimer);musicTimer=null}
+function sfx(freq=150,dur=.1,vol=.08,type='square'){try{if(!audioCtx)return;let o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type=type;o.frequency.setValueAtTime(freq,audioCtx.currentTime);o.frequency.exponentialRampToValueAtTime(Math.max(30,freq*.45),audioCtx.currentTime+dur);g.gain.setValueAtTime(vol,audioCtx.currentTime);g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+dur);o.connect(g);g.connect(audioCtx.destination);o.start();o.stop(audioCtx.currentTime+dur)}catch(e){}}
+function setNotice(s,t=90){notice=s;noticeTimer=t}
+function commentate(line,speak=false){commentaryLine=line;commentaryTimer=360;if(speak)playCrowdVoice(line)}
+function irishWhip(f,other){
+ if(!f||!other||f.down>0||f.hp<=0||f.stun>0||f.attack>0||f.whipTimer>0||f.onTopRope||f.stamina<10)return;
+ if(!f.inRing||!other.inRing){setNotice('IRISH WHIPS WORK INSIDE THE RING!',55);return}
+ const d=Math.hypot(f.x-other.x,(f.y-other.y)*1.1);if(d>135||other.down>0){setNotice('GRAPPLE CLOSE TO YOUR OPPONENT FIRST!',55);return}
+ f.attack=30;f.attackDuration=30;f.attackKind='whip';f.attackCooldown=36;f.stamina-=10;
+ other.whipTimer=72;other.whipVx=(other.x>=f.x?1:-1)*6.1;other.whipBounced=false;other.stun=0;other.onTopRope=false;other.climbTimer=0;other.air=0;other.vy=0;
+ setNotice(f.info.name+' IRISH WHIPS '+other.info.name+' INTO THE ROPES!',75);crowdMood=110;crowdChant='IRISH WHIP! OHhh!';playCrowdVoice('Ohhh!');sfx(130,.18,.09,'sawtooth');
+}
+function topRopeAction(f,other){
+ if(!f||!other||f.down>0||f.hp<=0||f.stun>0||f.whipTimer>0)return;
+ if(!f.inRing){setNotice('CLIMB THE TURNBUCKLES FROM INSIDE THE RING!',60);return}
+ if(f.onTopRope){
+  f.onTopRope=false;f.climbTimer=0;f.air=45;f.vy=7.4;f.attack=38;f.attackDuration=38;f.attackKind='top_dive';f.attackCooldown=50;f.stamina=Math.max(0,f.stamina-14);
+  const d=Math.hypot(f.x-other.x,(f.y-other.y)*1.1);
+  if(d<275&&other.down<=0){other.onTopRope=false;other.climbTimer=0;other.air=0;other.vy=0;other.hp=clamp(other.hp-27*f.info.power,0,300);other.flash=16;other.stun=30;other.down=other.hp<=0?20*60:(other.hp>200?5:other.hp>100?10:15)*60;other.downType=other.hp<=0?'ko':'impact';other.whipTimer=0;other.x=clamp(other.x+(other.x>=f.x?1:-1)*35,95,1175);clampFighterSpace(other);setNotice('TOP-ROPE DIVING ATTACK!',75);crowdMood=125;crowdChant='OHhh! THAT WAS HUGE!';playCrowdVoice('Ohhh! Hit him!');shake=13;sfx(58,.3,.13,'sawtooth')}
+  else setNotice('TOP-ROPE DIVE MISSED!',55);
+  return;
+ }
+ if(f.climbTimer>0){setNotice('CLIMBING THE TURNBUCKLE...',45);return}
+ const corners=[{x:300,y:310},{x:970,y:310},{x:300,y:440},{x:970,y:440}];let corner=corners.map(c=>({...c,d:Math.hypot(f.x-c.x,(f.y-c.y)*1.1)})).sort((a,b)=>a.d-b.d)[0];
+ if(corner.d>120){setNotice('MOVE NEXT TO A CORNER TURNBUCKLE FIRST!',60);return}
+ f.x=corner.x;f.y=corner.y;f.face=other.x>=f.x?1:-1;f.onTopRope=true;f.climbTimer=45;f.air=52;f.vy=0;f.moveAmount=0;setNotice(f.info.name+' CLIMBS TO THE TOP ROPE! JUMP TO DIVE!',75);playCrowdVoice('Ohhh!');
+}
+function updateFighter(f,other,isPlayer,dt){
+ if(state==='match')f.finisher=clamp(f.finisher+dt*(100/(120*60)),0,100);
+ f.walk+=dt*(Math.abs(f.vy)+1)*.1;if(f.flash>0)f.flash-=dt;if(f.attack>0)f.attack=Math.max(0,f.attack-dt);if(f.attackCooldown>0)f.attackCooldown=Math.max(0,f.attackCooldown-dt);if(f.stun>0)f.stun=Math.max(0,f.stun-dt);
+ if(f.down>0){f.down=Math.max(0,f.down-dt);if(f.down<=0){f.downType='';if(f.hp<=0){f.hp=22;f.stamina=Math.max(f.stamina,25);setNotice(f.info.name+' IS BACK UP!',70);playCrowdVoice('Come on!');}f.stun=26;}}
+ if(f.taunt>0)f.taunt-=dt;if(f.weaponTimer>0)f.weaponTimer=Math.max(0,f.weaponTimer-dt);if(f.weaponCooldown>0)f.weaponCooldown-=dt;if(f.whipTimer>0)f.whipTimer=Math.max(0,f.whipTimer-dt);
+ if(f.hp<=0&&f.down===0&&!f.pinning&&!f.submitting){f.down=20*60;f.downType='ko';}
+ f.air+=f.vy*dt;f.vy-=.45*dt;if(f.air<0){f.air=0;f.vy=0}
+ let dx=0,dy=0,jump=false;
+ if(isPlayer==='keyboardRight'){
+  if(keys.ArrowLeft)dx-=1;if(keys.ArrowRight)dx+=1;if(keys.ArrowUp)dy-=1;if(keys.ArrowDown)dy+=1;jump=!!keys.Numpad0;
+ }else if(isPlayer==='controller'){
+  dx=controller.moveX;dy=controller.moveY;jump=controller.jumpPressed;
+ }else if(isPlayer===true){
+  const keyboardActive=!localMode||controllerSide==='right';
+  const padActive=!localMode||controllerSide==='left';
+  if(keyboardActive){if(keys.KeyA)dx-=1;if(keys.KeyD)dx+=1;if(keys.ArrowUp)dy-=1;if(keys.ArrowDown||keys.KeyS)dy+=1;jump=!!(keys.KeyW||keys.Space);}
+  if(padActive){dx+=controller.moveX;dy+=controller.moveY;jump=jump||controller.jumpPressed;}
+ }
+ dx=clamp(dx,-1,1);dy=clamp(dy,-1,1);
+ if(f.onTopRope){
+  f.air=52;f.vy=0;dx=0;dy=0;
+  if(f.climbTimer>0){f.climbTimer=Math.max(0,f.climbTimer-dt);jump=false}
+  else if(jump){topRopeAction(f,other);dx=0;dy=0}
+ }
+ f.moveAmount=Math.hypot(dx,dy);
+ if(f.down<=0&&!f.onTopRope&&!f.pinning&&!f.submitting){
+  if(f.whipTimer>0){f.x+=f.whipVx*dt;f.moveAmount=.95;if(f.inRing){const min=280,max=992;if((f.x<min||f.x>max)&&!f.whipBounced){f.x=clamp(f.x,min,max);f.whipVx*=-.75;f.whipTimer=Math.min(f.whipTimer,17);f.whipBounced=true;setNotice(f.info.name+' REBOUNDS OFF THE ROPES!',48);playCrowdVoice('Ohhh!')}else if(f.whipBounced&&(f.x<=min||f.x>=max)){f.x=clamp(f.x,min,max);f.whipTimer=0}}else f.x=clamp(f.x,95,1175)}
+  else if(f.stun<=0){const cage=matchTypeIndex===3;f.x+=dx*(cage?3.2:4.1)*dt;f.y+=dy*(cage?2.25:3.25)*dt;if(dx)f.face=dx>0?1:-1;if(jump&&f.air===0&&f.vy===0){f.vy=8.8;sfx(240,.07,.04,'triangle')}if(dx||dy)f.stamina=Math.max(0,f.stamina-.035*dt);else f.stamina=Math.min(100,f.stamina+.12*dt)}
+ }
+ clampFighterSpace(f);
+}
+function strike(f,other,kind){
+ if(!f||!other||f.down>0||f.stun>0||f.attack>0||f.attackCooldown>0||f.hp<=0||f.stamina<6)return;
+ let heavy=kind==='heavy',grapple=kind==='grapple',kick=kind==='kick';f.attack=heavy?42:grapple?44:kick?38:34;f.attackCooldown=kick?50:60;f.attackDuration=f.attack;f.attackKind=kind;f.attackHit=false;f.stamina=Math.max(0,f.stamina-(heavy?17:grapple?12:kick?11:7));
+ const dist=Math.hypot(f.x-other.x,(f.y-other.y)*1.1),reach=heavy?120:grapple?105:kick?108:94;
+ if(dist<reach&&other.down<=0){
+  let dmg=(heavy?2:grapple?1.8:kick?2.25:1.5)*f.info.power*(f.air>0?1.15:1);other.hp=clamp(other.hp-dmg,0,300);other.flash=10;other.stun=heavy?25:grapple?19:kick?22:13;other.onTopRope=false;other.climbTimer=0;other.air=0;other.vy=0;other.x=other.x+(other.x>f.x?1:-1)*(heavy?27:grapple?22:12);other.y=other.y+(other.y>f.y?1:-1)*(heavy?10:6);clampFighterSpace(other);
+  sfx(heavy?75:grapple?115:kick?92:180,heavy?.23:.13,heavy?.13:.08,(heavy||kick)?'sawtooth':'square');shake=heavy||kick?8:5;flash=heavy||kick?5:2;crowdMood=95;crowdChant=(heavy||kick)?'OH! HIT HIM!':'HIT HIM!';commentate(f.info.name+' lands a '+(kick?'kick':heavy?'heavy strike':grapple?'grapple':'quick strike')+' on '+other.info.name+'!',false);playCrowdVoice(heavy||kick?'Ohhh!':'Hit him!');
+  // Heavy attacks do not knock wrestlers down on every hit, especially power/tank styles.
+  const sturdy=['power','tank'].includes(other.info.style),knockChance=heavy?(sturdy?.015:.055):(grapple?.075:kick?.025:.008);
+  if(other.hp<=0){other.down=kind==='finisher'?40*60:20*60;other.downType=kind==='finisher'?'finisher':'ko';other.vy=0;setNotice(other.info.name+' IS DOWN! PIN OR SUBMIT!',105);sfx(50,.5,.11,'sawtooth')}
+  else if(Math.random()<knockChance){other.down=(other.hp>200?5:other.hp>100?10:15)*60;other.downType='impact';other.vy=0;setNotice(heavy?'BIG IMPACT!':'TAKEN DOWN!',42)}
+ }else{sfx(320,.05,.025,'triangle')}
+}
+function playCrowdVoice(line){
+ if(!('speechSynthesis' in window)||typeof SpeechSynthesisUtterance==='undefined')return;
+ const now=Date.now();if(now-lastVoiceAt<1800)return;lastVoiceAt=now;
+ try{window.speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(line);u.rate=1.08;u.pitch=.92;u.volume=.8;window.speechSynthesis.speak(u)}catch(e){}
+}
+function useFinisher(f,other,side){
+ if(!f||!other||f.finisher<100||f.down>0||f.stun>0||f.attack>0||f.whipTimer>0||f.onTopRope||f.hp<=0){setNotice('BUILD YOUR PURPLE FINISHER METER FIRST!',65);return}
+ const dist=Math.hypot(f.x-other.x,(f.y-other.y)*1.1);if(dist>145||other.down>0){setNotice('GET CLOSE TO YOUR OPPONENT FOR THE FINISHER!',60);return}
+ f.finisher=0;f.attack=48;f.attackDuration=48;f.attackKind='finisher';f.stamina=Math.max(0,f.stamina-10);const damage=75*f.info.power;other.hp=clamp(other.hp-damage,0,300);other.flash=18;other.stun=45;other.onTopRope=false;other.climbTimer=0;other.whipTimer=0;other.vy=0;other.air=0;other.x=other.x+(other.x>f.x?1:-1)*55;clampFighterSpace(other);shake=18;flash=10;crowdMood=150;crowdChant='FINISHER! FINISHER!';setNotice(f.info.name+' HITS THE FINISHER!',100);sfx(52,.45,.16,'sawtooth');playCrowdVoice('Ohhh! Hit him!');
+ if(other.hp<=0){other.down=40*60;other.downType='finisher';setNotice(other.info.name+' IS DOWN! FINISHER KO — 40 SECOND RECOVERY!',130)}else{other.down=(other.hp>200?5:other.hp>100?10:15)*60;other.downType='impact'}
+}
+function useRingsideWeapon(f,other){
+ if(!f||!other||f.down>0||f.stun>0)return;
+ const allowed=[1,2,11].includes(matchTypeIndex);
+ if(!f.hasChair){
+  if(f.inRing){setNotice('WEAPONS ARE OUTSIDE THE RING — USE EXIT RING FIRST!',70);return}
+  const near=chairs.filter(p=>p.available).map(p=>({...p,d:Math.hypot(p.x-f.x,(p.y-f.y)*1.15)})).sort((a,b)=>a.d-b.d)[0];
+  if(!near||near.d>78){setNotice('MOVE CLOSER TO A RINGSIDE WEAPON!',55);return}
+  const actual=chairs.find(p=>p.available&&p.x===near.x&&p.y===near.y&&p.type===near.type);if(!actual)return;actual.available=false;f.hasChair=true;f.weaponType=actual.type;setNotice(f.info.name+' PICKS UP THE '+actual.type.toUpperCase()+'!',75);playCrowdVoice('Ohhh!');return;
+ }
+ // A weapon swing is only a violation if it makes contact. A miss does not disqualify the user.
+ if(Math.hypot(f.x-other.x,(f.y-other.y)*1.1)>142){setNotice('GET CLOSE TO YOUR OPPONENT TO SWING THE '+(f.weaponType||'WEAPON').toUpperCase()+'!',60);return}
+ if(f.weaponCooldown>0){setNotice('RESET YOUR GRIP!',35);return}
+ if(!allowed){const offender=f===player?'player':'enemy';setNotice('REFEREE CALLS FOR THE BELL! ILLEGAL WEAPON — DISQUALIFICATION!',110);commentate('The referee spots the illegal weapon strike. That is a disqualification!',true);completeMatch(offender==='player'?'enemy':'player','DISQUALIFICATION • ILLEGAL WEAPON');return}
+ const dmg=({chair:21,table:18,ladder:23,'kendo stick':17,'baseball bat':25,'steel steps':28,sledgehammer:27,'trash can':19,broom:12}[f.weaponType]||18)*f.info.power;
+ other.hp=clamp(other.hp-dmg,0,300);other.flash=16;other.stun=33;other.attack=0;other.onTopRope=false;other.climbTimer=0;other.air=0;other.vy=0;other.x=clamp(other.x+(other.x>=f.x?1:-1)*36,95,1175);clampFighterSpace(other);
+ f.weaponTimer=24;f.weaponCooldown=52;shake=12;flash=5;crowdMood=110;crowdChant='OHhh! HIT HIM!';setNotice(f.info.name+' STRIKES WITH THE '+(f.weaponType||'WEAPON').toUpperCase()+'!',85);commentate(f.info.name+' smashes '+other.info.name+' with the '+(f.weaponType||'weapon')+'!',true);playCrowdVoice('Ohhh! Hit him!');sfx(54,.24,.14,'sawtooth');
+ if(other.hp<=0){other.down=20*60;other.downType='ko';setNotice(other.info.name+' IS DOWN! PIN OR SUBMIT!',100)}else if(Math.random()<.16){other.down=(other.hp>200?5:other.hp>100?10:15)*60;other.downType='impact'}
+}
+function showmanTaunt(f,other){if(!f||f.down>0||f.hp<=0||f.stun>0)return;f.taunt=70;setNotice(f.info.name+' FIRES UP THE CROWD!',55);crowdMood=90;crowdChant='FIGHTER FIVE!';playCrowdVoice('Hit him!');sfx(260,.11,.04,'triangle')}
+function doPin(f,other,side){if(!f||!other||f.down>0||f.hp<=0||other.down<=0||Math.hypot(f.x-other.x,(f.y-other.y)*1.1)>125){setNotice('GET CLOSE TO A DOWNED OPPONENT!',55);return}if(!canAttemptFinish(f,other,'pin'))return;pinSide=side;refX=other.x+38;refY=other.y+12;pinTimer=0;pinCount=0;kickoutNeedle=.04;kickoutDirection=1;kickoutTarget=.18+Math.random()*.64;kickoutAttempts=0;state='pin';setNotice('REFEREE SLIDES IN — PIN ATTEMPT!',80);commentate('The referee is in position for the cover!',true);sfx(680,.08,.06,'triangle')}
+function doSub(f,other,side){if(!f||!other||f.down>0||f.hp<=0||!(other.down>0||other.stun>0)||Math.hypot(f.x-other.x,(f.y-other.y)*1.1)>125){setNotice('STUN OR KNOCK DOWN YOUR OPPONENT FIRST!',55);return}if(!canAttemptFinish(f,other,'submission'))return;pinSide=side;refX=other.x+32;refY=other.y+15;submission=0;state='submission';setNotice('SUBMISSION LOCKED IN!',90);commentate(f.info.name+' has locked in a submission hold!',true);sfx(130,.2,.1,'sawtooth')}
+function updateMatch(dt){
+ frame+=dt;matchTime+=dt/60;if(noticeTimer>0)noticeTimer-=dt;if(shake>0)shake*=Math.pow(.84,dt);if(flash>0)flash-=dt;if(crowdMood>0)crowdMood-=dt;if(crowdChantTimer>0)crowdChantTimer-=dt;
+ updateFighter(player,enemy,localMode&&controllerSide==='left'?'controller':true,dt);updateFighter(enemy,player,localMode?(controllerSide==='left'?'keyboardRight':'controller'):false,dt);
+ // CPU opponent actively chases, circles and attacks. In local mode, Player 2 is fully human-controlled instead.
+ if(!localMode&&enemy.down<=0&&enemy.hp>0&&enemy.stun<=0&&enemy.attack<=0&&enemy.whipTimer<=0&&!enemy.onTopRope){
+  // The elite CPU actively chases, tags, and finishes instead of only trading random strikes.
+  if(enemy.inRing!==player.inRing){if(!player.inRing&&enemy.inRing){enemy.x=clamp(player.x,320,955);enemy.y=448;toggleRingSide(enemy)}else if(player.inRing&&!enemy.inRing){enemy.inRing=true;enemy.x=clamp(player.x+(player.x<640?85:-85),305,970);enemy.y=420;enemy.air=0;enemy.vy=0;commentate(enemy.info.name+' climbs back between the ropes.')}}
+  if(matchTypeIndex===10&&enemy.hp<125&&enemyPartner&&enemyPartner.hp>0&&tagCooldownEnemy<=0)tagTeamSwap('enemy');
+  enemy.aiThink-=dt;const dx=player.x-enemy.x,dy=player.y-enemy.y,dist=Math.hypot(dx,dy*1.1);enemy.face=dx>=0?1:-1;
+  const aiBoost=[1.05,1.65,2.25][aiDifficulty];
+  if(dist>108){enemy.x+=Math.sign(dx)*Math.min(Math.abs(dx),rand(2.6,4.4)*aiBoost*dt);enemy.y+=Math.sign(dy)*Math.min(Math.abs(dy),rand(1.8,3.1)*aiBoost*dt);enemy.aiMove=1;enemy.moveAmount=1}
+  else if(enemy.aiThink<=0){
+   if(player.down>0&&dist<128&&matchTypeIndex!==4){if(matchTypeIndex===7||Math.random()<.45)doSub(enemy,player,'enemy');else doPin(enemy,player,'enemy');enemy.aiThink=rand(45,78)}
+   else if(aiDifficulty===2&&player.attack>0&&player.attack<15&&dist<105&&Math.random()<.42){strike(enemy,player,'grapple');enemy.aiThink=rand(8,13);commentate(enemy.info.name+' reads the attack and counters with a grapple!')}
+   else {let r=Math.random();if(enemy.finisher>=100&&r<.88)useFinisher(enemy,player,'enemy');else if(enemy.inRing&&player.inRing&&r<.31)irishWhip(enemy,player);else if(r<.51)strike(enemy,player,'kick');else if(r<.73)strike(enemy,player,'heavy');else if(r<.89)strike(enemy,player,'grapple');else strike(enemy,player,'quick');enemy.aiThink=rand(8,17)/(aiBoost)}
+  }
+  clampFighterSpace(enemy);
+ }
+ // Input ownership: in a local match, the gamepad controls only the side selected on the device screen.
+ const keyboardControlsLeft=!localMode||controllerSide==='right';
+ const gamepadControlsLeft=!localMode||controllerSide==='left';
+ if(keyboardControlsLeft){
+  if(keys.KeyJ&&player.attack<=0)strike(player,enemy,'quick');
+  if(keys.KeyK&&player.attack<=0)strike(player,enemy,'heavy');
+  if(keys.KeyE&&player.attack<=0)strike(player,enemy,'grapple');
+  if(keys.KeyH&&player.attack<=0){strike(player,enemy,'kick');keys.KeyH=false;}
+  if(keys.KeyG){keys.KeyG=false;tagTeamSwap('player');}
+  if(keys.KeyF){keys.KeyF=false;useFinisher(player,enemy,'player')}
+  if(keys.KeyL){useRingsideWeapon(player,enemy);keys.KeyL=false;}
+  if(keys.KeyT){showmanTaunt(player,enemy);keys.KeyT=false;}
+  if(keys.KeyP){keys.KeyP=false;doPin(player,enemy,'player')}
+  if(keys.KeyR&&!keys._whipLatch){irishWhip(player,enemy);keys._whipLatch=true}if(!keys.KeyR)keys._whipLatch=false;
+  if(keys.KeyC&&!keys._climbLatch){topRopeAction(player,enemy);keys._climbLatch=true}if(!keys.KeyC)keys._climbLatch=false;
+  if(keys.KeyX&&!keys._exitLatch){toggleRingSide(player);keys._exitLatch=true}if(!keys.KeyX)keys._exitLatch=false;
+  if((keys.KeyU)&&player.down<=0&&player.hp>0&&enemy.down>0&&Math.hypot(player.x-enemy.x,(player.y-enemy.y)*1.1)<125){if(!keys._subLatch){doSub(player,enemy,'player');keys._subLatch=true}}
+  if(!keys.KeyU)keys._subLatch=false;
+ }
+ if(gamepadControlsLeft){
+  if(controller.quickPressed&&player.attack<=0)strike(player,enemy,'quick');
+  if(controller.heavyPressed&&player.attack<=0)strike(player,enemy,'heavy');
+  if(controller.grapplePressed&&player.attack<=0)strike(player,enemy,'grapple');
+  if(controller.kickAttackPressed&&player.attack<=0)strike(player,enemy,'kick');
+  if(controller.tagPressed)tagTeamSwap('player');
+  if(controller.finisherPressed)useFinisher(player,enemy,'player');
+  if(controller.weaponPressed)useRingsideWeapon(player,enemy);
+  if(controller.whipPressed)irishWhip(player,enemy);
+  if(controller.climbPressed)topRopeAction(player,enemy)
+  if(controller.exitPressed)toggleRingSide(player);
+  if(controller.pinPressed)doPin(player,enemy,'player');
+  if(controller.submit&&player.down<=0&&player.hp>0&&enemy.down>0&&Math.hypot(player.x-enemy.x,(player.y-enemy.y)*1.1)<125)doSub(player,enemy,'player');
+ }
+ // Keyboard on the right uses arrows for movement and the numeric keypad for actions.
+ if(localMode&&controllerSide==='left'){
+  if(keys.Numpad1&&enemy.attack<=0)strike(enemy,player,'quick');
+  if(keys.Numpad2&&enemy.attack<=0)strike(enemy,player,'heavy');
+  if(keys.Numpad3&&enemy.attack<=0)strike(enemy,player,'grapple');
+  if(keys.Numpad4&&enemy.attack<=0){strike(enemy,player,'kick');keys.Numpad4=false;}
+  if(keys.Numpad8){keys.Numpad8=false;tagTeamSwap('enemy');}
+  if(keys.NumpadEnter){keys.NumpadEnter=false;useFinisher(enemy,player,'enemy')}
+  if(keys.NumpadDivide){useRingsideWeapon(enemy,player);keys.NumpadDivide=false}
+  if(keys.NumpadDecimal){showmanTaunt(enemy,player);keys.NumpadDecimal=false}
+  if(keys.NumpadMultiply&&!keys._p2WhipLatch){irishWhip(enemy,player);keys._p2WhipLatch=true}if(!keys.NumpadMultiply)keys._p2WhipLatch=false;
+  if(keys.NumpadAdd&&!keys._p2ClimbLatch){topRopeAction(enemy,player);keys._p2ClimbLatch=true}if(!keys.NumpadAdd)keys._p2ClimbLatch=false;
+  if(keys.NumpadSubtract&&!keys._p2ExitLatch){toggleRingSide(enemy);keys._p2ExitLatch=true}if(!keys.NumpadSubtract)keys._p2ExitLatch=false;
+  if(keys.Numpad7){keys.Numpad7=false;doPin(enemy,player,'enemy')}
+  if(keys.Numpad9&&enemy.down<=0&&enemy.hp>0&&player.down>0&&Math.hypot(player.x-enemy.x,(player.y-enemy.y)*1.1)<125){if(!keys._p2SubLatch){doSub(enemy,player,'enemy');keys._p2SubLatch=true}}
+  if(!keys.Numpad9)keys._p2SubLatch=false;
+ }
+ // If the controller is assigned to the right, its buttons act only on the right wrestler.
+ if(localMode&&controllerSide==='right'){
+  if(controller.quickPressed&&enemy.attack<=0)strike(enemy,player,'quick');
+  if(controller.heavyPressed&&enemy.attack<=0)strike(enemy,player,'heavy');
+  if(controller.grapplePressed&&enemy.attack<=0)strike(enemy,player,'grapple');
+  if(controller.kickAttackPressed&&enemy.attack<=0)strike(enemy,player,'kick');
+  if(controller.tagPressed)tagTeamSwap('enemy');
+  if(controller.finisherPressed)useFinisher(enemy,player,'enemy');
+  if(controller.weaponPressed)useRingsideWeapon(enemy,player);
+  if(controller.whipPressed)irishWhip(enemy,player);
+  if(controller.climbPressed)topRopeAction(enemy,player)
+  if(controller.exitPressed)toggleRingSide(enemy);
+  if(controller.pinPressed)doPin(enemy,player,'enemy');
+  if(controller.submit&&enemy.down<=0&&enemy.hp>0&&player.down>0&&Math.hypot(player.x-enemy.x,(player.y-enemy.y)*1.1)<125)doSub(enemy,player,'enemy');
+ }
+ // The referee follows the action but gives the wrestlers room to move.
+ const refTargetX=(state==='pin'||state==='submission')?(pinSide==='player'?enemy.x:player.x):clamp((player.x+enemy.x)/2+42,370,910);const refTargetY=(state==='pin'||state==='submission')?(pinSide==='player'?enemy.y:player.y)+16:clamp((player.y+enemy.y)/2+28,390,462);refX+=(refTargetX-refX)*.12;refY+=(refTargetY-refY)*.12;
+ // The inferno ring has active fire hazards at the perimeter; staying near the flames steadily drains health.
+ if(matchTypeIndex===5){for(const f of [player,enemy]){if(f.inRing&&((f.x<325)||(f.x>950)||(f.y<315)||(f.y>440))&&f.down<=0){f.fireTime+=dt;if(f.fireTime>=52){f.fireTime=0;f.hp=clamp(f.hp-5,0,300);f.flash=10;setNotice(f.info.name+' IS SINGED BY THE INFERNO ROPES!',45);commentate('The flames are catching up with '+f.info.name+'!',true)}}else f.fireTime=0}}
+ // Singles matches have a referee's ten-count if a wrestler remains outside the ring.
+ if(matchTypeIndex===0){
+  const oldP=Math.floor(ringOutPlayer),oldE=Math.floor(ringOutEnemy);ringOutPlayer=player.inRing?0:ringOutPlayer+dt/60;ringOutEnemy=enemy.inRing?0:ringOutEnemy+dt/60;
+  if(!player.inRing&&Math.floor(ringOutPlayer)>oldP){let n=Math.min(10,Math.floor(ringOutPlayer)+1);setNotice('REFEREE COUNTS PLAYER 1: '+n+'!',40);commentate('Referee count on Player One: '+n+'!',n===1)}
+  if(!enemy.inRing&&Math.floor(ringOutEnemy)>oldE){let n=Math.min(10,Math.floor(ringOutEnemy)+1);setNotice('REFEREE COUNTS '+enemy.info.name+': '+n+'!',40);commentate('Referee count on '+enemy.info.name+': '+n+'!',n===1)}
+  if(ringOutPlayer>=10&&ringOutEnemy>=10){state='draw';finishReason='DOUBLE COUNT-OUT';stopMusic();stopCrowdChants();commentate('Both wrestlers are counted out! The match is a draw.',true)}else if(ringOutPlayer>=10)completeMatch('enemy','DEFEAT BY 10-COUNT / COUNT-OUT');else if(ringOutEnemy>=10)completeMatch('player','VICTORY BY 10-COUNT / COUNT-OUT');
+ }
+ if(tagCooldownPlayer>0)tagCooldownPlayer=Math.max(0,tagCooldownPlayer-dt);if(tagCooldownEnemy>0)tagCooldownEnemy=Math.max(0,tagCooldownEnemy-dt);
+ if(commentaryTimer>0)commentaryTimer=Math.max(0,commentaryTimer-dt);else if(Math.floor(matchTime)%18===0&&Math.floor(matchTime)!==Math.floor(matchTime-dt/60)){commentaryLine=['The crowd is on its feet!','Both competitors are looking for an opening.','The referee is watching closely.'][Math.floor(matchTime/18)%3];commentaryTimer=240;}
+ // Last Wrestler Standing starts a count for every knockdown, regardless of green/yellow/red HP.
+ if(matchTypeIndex===4){if(enemy.down>0)lastStandEnemy+=dt/60;else lastStandEnemy=0;if(player.down>0)lastStandPlayer+=dt/60;else lastStandPlayer=0;
+  if(enemy.down>0&&lastStandEnemy>=10)completeMatch('player','VICTORY BY 10-COUNT')
+  if(player.down>0&&lastStandPlayer>=10)completeMatch('enemy','DEFEAT BY 10-COUNT')
+  if(enemy.down>0&&lastStandEnemy<10&&Math.floor(lastStandEnemy)!==Math.floor(lastStandEnemy-dt/60)){let n=Math.floor(lastStandEnemy)+1;setNotice('REFEREE COUNT: '+n+'!',40);commentate('Referee counts the opponent: '+n+'!',true)}
+  if(player.down>0&&lastStandPlayer<10&&Math.floor(lastStandPlayer)!==Math.floor(lastStandPlayer-dt/60)){let n=Math.floor(lastStandPlayer)+1;setNotice('REFEREE COUNT: '+n+' — GET UP!',35);commentate('The referee counts Player One: '+n+'!',true)}
+ }
+}
+function kickoutAttempt(){
+ const victim=pinSide==='enemy'?player:enemy;const victimSide=pinSide==='enemy'?'player':'enemy';const zone=clamp((victim.hp/300)*.18,.035,.18);
+ const hit=Math.abs(kickoutNeedle-kickoutTarget)<=zone/2;kickoutAttempts++;
+ if(hit){victim.hp=Math.max(8,victim.hp);victim.down=0;victim.downType='';victim.stun=25;victim.pinning=false;victim.submitting=false;state='match';setNotice(victim.info.name+' KICKS OUT! PERFECT TIMING!',75);commentate(victim.info.name+' finds the green kick-out window!',true);sfx(520,.18,.09,'triangle');keys.KeyJ=keys.Space=keys.KeyK=false;controller.kickPressed=false;return true}
+ setNotice('MISSED THE GREEN KICK-OUT SPOT — TRY AGAIN!',36);sfx(120,.06,.03,'square');keys.KeyJ=keys.Space=keys.KeyK=false;controller.kickPressed=false;return false;
+}
+function updatePin(dt){
+ kickoutNeedle+=kickoutDirection*dt*.0095;if(kickoutNeedle>.98){kickoutNeedle=.98;kickoutDirection=-1}else if(kickoutNeedle<.02){kickoutNeedle=.02;kickoutDirection=1}
+ const p1Victim=pinSide==='enemy',p2Victim=pinSide==='player';
+ let humanAttempt=false;
+ if(p1Victim){if(!localMode)humanAttempt=!!(keys.KeyJ||keys.KeyK||keys.Space||controller.kickPressed);else if(controllerSide==='right')humanAttempt=!!(keys.KeyJ||keys.KeyK||keys.Space);else humanAttempt=!!controller.kickPressed}
+ if(p2Victim&&localMode){if(controllerSide==='left')humanAttempt=!!(keys.Numpad1||keys.Numpad0||keys.Numpad4);else humanAttempt=!!controller.kickPressed}
+ if(humanAttempt){kickoutAttempt();return}
+ // Elite CPU looks for the timing window and can kick out; weaker health shrinks its success zone too.
+ if(p2Victim&&!localMode){const zone=clamp((enemy.hp/300)*.18,.035,.18);if(Math.abs(kickoutNeedle-kickoutTarget)<=zone/2&&Math.random()<([.25,.62,.91][aiDifficulty])){kickoutAttempt();return}}
+ pinTimer+=dt/60;if(pinTimer>=1&&pinCount<3){pinCount++;pinTimer-=1;sfx(740,.1,.08,'triangle');setNotice(['ONE!','TWO!','THREE!'][pinCount-1],52);commentate(['The referee counts one!','The referee counts two!','The three count!'][pinCount-1],pinCount===2);if(pinCount>=3)completeMatch(pinSide==='player'?'player':'enemy','VICTORY BY PINFALL')}
+}
+function updateSubmission(dt){
+ const keyboardLeftActive=!localMode||controllerSide==='right';
+ const padLeftActive=!localMode||controllerSide==='left';
+ const leftKeyboardEscape=keyboardLeftActive&&(keys.KeyJ||keys.Space||keys.KeyA||keys.KeyD||keys.ArrowLeft||keys.ArrowRight||keys.ArrowUp||keys.ArrowDown);
+ const leftPadEscape=padLeftActive&&(controller.quickPressed||controller.jumpPressed||controller.kickPressed);
+ const rightKeyboardEscape=localMode&&controllerSide==='left'&&(keys.Numpad1||keys.Numpad0||keys.Numpad4||keys.Numpad6||keys.ArrowLeft||keys.ArrowRight);
+ const rightPadEscape=localMode&&controllerSide==='right'&&controller.kickPressed;
+ const p1Escapes=pinSide==='enemy'&&(leftKeyboardEscape||leftPadEscape);
+ const p2Escapes=localMode&&pinSide==='player'&&(rightKeyboardEscape||rightPadEscape);
+ if(p1Escapes||p2Escapes){if(pinSide==='enemy'){player.hp=Math.max(1,player.hp);player.down=0;player.downType='';player.stun=20}else{enemy.hp=Math.max(1,enemy.hp);enemy.down=0;enemy.downType='';enemy.stun=20}submission=0;state='match';setNotice('ESCAPED THE HOLD!',60);return}
+ if(pinSide==='player'){
+  const holding=(keyboardLeftActive&&keys.KeyU)||(padLeftActive&&controller.submit);
+  if(holding)submission+=dt*.27;else submission=Math.max(0,submission-dt*.12);
+ }else if(localMode&&controllerSide==='left'){
+  if(keys.Numpad9)submission+=dt*.27;else submission=Math.max(0,submission-dt*.12);
+ }else if(localMode&&controllerSide==='right'){
+  if(controller.submit)submission+=dt*.27;else submission=Math.max(0,submission-dt*.12);
+ }else submission+=dt*.16;
+ if(submission>=100)completeMatch(pinSide==='player'?'player':'enemy',matchTypeIndex===7?'OPPONENT SAYS I QUIT':'VICTORY BY SUBMISSION')
+}
+function drawPinOverlay(){ctx.fillStyle='rgba(4,6,16,.74)';ctx.fillRect(0,0,W,H);rounded(350,260,580,300,18,'rgba(7,10,24,.98)','#ffd15e',3);text('PIN ATTEMPT',640,295,32,'#ffce55','center','900','Impact,Arial Narrow,sans-serif');text(pinCount===0?'REFEREE IS IN POSITION':`${['ONE','TWO','THREE'][Math.min(2,pinCount-1)]} COUNT!`,640,333,27,'#fff','center','900','Impact,Arial Narrow,sans-serif');
+ const victim=pinSide==='enemy'?player:enemy,zone=clamp((victim.hp/300)*.18,.035,.18),barX=430,barY=385,barW=420;rounded(barX,barY,barW,25,8,'#293049','#536080',1);rounded(barX+barW*kickoutTarget-barW*zone/2,barY,barW*zone,25,4,'#28f06f','#d5ffe0',1);ctx.fillStyle='#ffffff';ctx.beginPath();ctx.moveTo(barX+barW*kickoutNeedle,barY-8);ctx.lineTo(barX+barW*kickoutNeedle-7,barY-19);ctx.lineTo(barX+barW*kickoutNeedle+7,barY-19);ctx.closePath();ctx.fill();ctx.fillRect(barX+barW*kickoutNeedle-2,barY-1,4,28);text('HIT KICK OUT WHEN THE WHITE MARK CROSSES GREEN',640,426,13,'#cbd4ef','center','900');
+ text('GREEN WINDOW: '+Math.round(zone*100)+'%  •  LOW HP = SMALLER TARGET',640,449,11,'#ffce55','center','900');rounded(485,470,310,15,6,'#242840');rounded(485,470,310*clamp((3-pinCount-pinTimer)/3,0,1),15,6,'#ffce55');text('KICK OUT KEY: J / SPACE / CONTROLLER A',640,500,12,'#aab2d2','center','bold');buttons.push({x:535,y:515,w:210,h:34,label:'KICK OUT NOW',action:kickoutAttempt,size:14,stroke:'#37df72'});
+}
+function drawSubOverlay(){ctx.fillStyle='rgba(4,6,16,.66)';ctx.fillRect(0,0,W,H);rounded(370,282,540,230,18,'rgba(7,10,24,.96)','#ff4c72',3);text(pinSide==='player'?'SUBMISSION HOLD!':'YOU ARE IN A HOLD!',640,323,28,'#ff5672','center','900','Impact,Arial Narrow,sans-serif');text(pinSide==='player'?'HOLD U TO SUBMIT • P2 CAN MASH NUMPAD 1':'BREAK FREE: TAP J / SPACE / ARROWS',640,370,15,'#e7eafa','center','bold');rounded(450,407,380,20,8,'#242840');rounded(450,407,380*clamp(submission/100,0,1),20,8,'#ff4e70');text(Math.floor(submission)+'%',640,450,16,'#fff','center','bold');}
+function drawCage(){ctx.save();ctx.strokeStyle='rgba(190,210,255,.62)';ctx.lineWidth=2;for(let x=250;x<=1020;x+=24){ctx.beginPath();ctx.moveTo(x,255);ctx.lineTo(x,500);ctx.stroke()}for(let y=255;y<=500;y+=20){ctx.beginPath();ctx.moveTo(245,y);ctx.lineTo(1025,y);ctx.stroke()}ctx.strokeStyle='#d6e6ff';ctx.lineWidth=6;ctx.strokeRect(245,255,780,245);ctx.restore()}
+function pressVirtualKey(code,pointerId=activePointerId){
+ keys[code]=true;virtualKeys.add(code);
+ const id=(pointerId===null||pointerId===undefined)?-1:pointerId;
+ if(!virtualKeysByPointer.has(id))virtualKeysByPointer.set(id,new Set());
+ virtualKeysByPointer.get(id).add(code);
+}
+function applyPointerVirtualKeys(pointerId,wanted){
+ const old=virtualKeysByPointer.get(pointerId)||new Set();
+ for(const code of old){
+  if(wanted.has(code))continue;
+  let heldElsewhere=false;
+  for(const [otherId,set] of virtualKeysByPointer){if(otherId!==pointerId&&set.has(code)){heldElsewhere=true;break}}
+  if(!heldElsewhere){keys[code]=false;virtualKeys.delete(code)}
+ }
+ for(const code of wanted){keys[code]=true;virtualKeys.add(code)}
+ virtualKeysByPointer.set(pointerId,new Set(wanted));
+}
+function updateTouchJoystick(pointerId,p){
+ const cx=108,cy=678,limit=55,dx=p.x-cx,dy=p.y-cy,mag=Math.hypot(dx,dy)||1;
+ const scale=Math.min(1,limit/mag);
+ touchStickPointers.set(pointerId,{x:cx+dx*scale,y:cy+dy*scale});
+ touchStickPosition={x:cx+dx*scale,y:cy+dy*scale};
+ const dead=13,wanted=new Set();
+ if(dx < -dead)wanted.add('KeyA');if(dx > dead)wanted.add('KeyD');
+ if(dy < -dead)wanted.add('ArrowUp');if(dy > dead)wanted.add('KeyS');
+ applyPointerVirtualKeys(pointerId,wanted);
+}
+function drawTouchControls(){
+ if(!touchControlsEnabled)return;
+ const control=(x,y,w,h,label,action,size=13,stroke='#66759c')=>{const b={x,y,w,h,label,action,size,stroke};buttons.push(b);drawButton(b);return b};
+ // Virtual analog stick: drag inside the circle. A finger can stay on the stick while another taps attacks.
+ const cx=108,cy=678,r=66;
+ ctx.save();
+ ctx.fillStyle='rgba(7,12,28,.62)';ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.fill();
+ ctx.strokeStyle='rgba(202,222,255,.72)';ctx.lineWidth=3;ctx.beginPath();ctx.arc(cx,cy,r,0,Math.PI*2);ctx.stroke();
+ ctx.strokeStyle='rgba(135,158,202,.45)';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(cx-r+12,cy);ctx.lineTo(cx+r-12,cy);ctx.moveTo(cx,cy-r+12);ctx.lineTo(cx,cy+r-12);ctx.stroke();
+ let thumb={x:cx,y:cy};for(const v of touchStickPointers.values())thumb=v;
+ ctx.fillStyle='rgba(76,104,159,.88)';ctx.beginPath();ctx.arc(thumb.x,thumb.y,27,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#d7e7ff';ctx.lineWidth=2;ctx.stroke();
+ text('MOVE',cx,cy+r+15,11,'#d9e5ff','center','900');
+ ctx.restore();
+ // Compact utility controls in the lower middle, leaving the center of the ring visible.
+ const utilities=[
+  [246,612,82,43,player?.inRing?'EXIT RING':'ENTER RING',()=>toggleRingSide(player),10],
+  [334,612,70,43,'TAG',()=>tagTeamSwap('player'),12],
+  [410,612,80,43,'WHIP',()=>irishWhip(player,enemy),12],
+  [496,612,91,43,'TOP ROPE',()=>topRopeAction(player,enemy),11],
+  [593,612,83,43,'WEAPON',()=>useRingsideWeapon(player,enemy),11],
+  [682,612,73,43,'JUMP',()=>pressVirtualKey('Space'),12],
+  [761,612,76,43,'PAUSE',()=>{pausedFrom='match';state='paused'},12],
+  [246,668,70,43,'PIN',()=>doPin(player,enemy,'player'),12],
+  [322,668,70,43,'SUB',()=>doSub(player,enemy,'player'),12],
+  [398,668,84,43,'FINISH',()=>useFinisher(player,enemy,'player'),12],
+  [488,668,72,43,'RUN',()=>pressVirtualKey('ShiftLeft'),12],
+  [566,668,76,43,'TAUNT',()=>showmanTaunt(player,enemy),11],
+  [648,668,90,43,'REVERSAL',()=>{if(player)player.reversal=Math.max(player.reversal||0,35);setNotice('READY TO REVERSE!',50)},10],
+  [744,668,93,43,'KICK OUT',()=>kickoutAttempt(),10]
+ ];
+ utilities.forEach(a=>control(...a));
+ // Four large face buttons, arranged like a modern wrestling-game touchscreen pad.
+ const face=(x,y,label,caption,action,accent)=>{
+  const r=32,b={x:x-r,y:y-r,w:r*2,h:r*2,label,action,size:19,stroke:accent};buttons.push(b);
+  ctx.save();ctx.shadowColor=accent;ctx.shadowBlur=8;ctx.fillStyle='rgba(11,17,36,.92)';ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();ctx.strokeStyle=accent;ctx.lineWidth=3;ctx.stroke();
+  text(label,x,y-6,21,'#fff','center','900','Arial,sans-serif');text(caption,x,y+16,8,'#dce5fb','center','900');ctx.restore();
+ };
+ face(1064,620,'X','QUICK',()=>strike(player,enemy,'quick'),'#46baff');
+ face(1134,678,'Y','HEAVY',()=>strike(player,enemy,'heavy'),'#ffd34d');
+ face(1064,736,'A','KICK',()=>strike(player,enemy,'kick'),'#46df8b');
+ face(994,678,'B','GRAPPLE',()=>strike(player,enemy,'grapple'),'#ff596d');
+ text('FIGHTER 5 TOUCH CONTROLS',1064,578,10,'#aab9dc','center','900');
+}
+function drawMatch(){ctx.save();if(shake>1){ctx.translate(rand(-shake,shake),rand(-shake/2,shake/2))}drawBackdrop();drawRing();drawLights();if(matchTypeIndex===3)drawCage();if(matchTypeIndex===5)drawInfernoEffects();if(matchTypeIndex===10){if(playerPartner)drawFighter(playerPartner);if(enemyPartner)drawFighter(enemyPartner)}drawFighter(player);drawFighter(enemy);drawReferee();drawHUD();drawCommentary();if(matchTypeIndex===4){if(lastStandEnemy>0&&enemy.down>0)text('OPPONENT COUNT: '+Math.min(10,Math.floor(lastStandEnemy)+1),640,125,18,'#ffce55','center','900');if(lastStandPlayer>0&&player.down>0)text('YOUR COUNT: '+Math.min(10,Math.floor(lastStandPlayer)+1),640,145,18,'#ff5f73','center','900')};if(flash>0){ctx.fillStyle=`rgba(255,255,255,${flash/90})`;ctx.fillRect(0,0,W,H)}ctx.restore();drawTouchControls();}
+function render(){ctx.clearRect(0,0,W,H);buttons=[];if(state==='menu'){drawMenu()}else if(state==='settings'){drawSettings()}else if(state==='playModes'){drawPlayModes()}else if(state==='devices'){drawScreenBackground();drawDevices()}else if(state==='select'){drawSelect()}else if(state==='arenas'){drawArenaSelect()}else if(state==='help'){drawScreenBackground();drawHelp()}else if(state==='modes'){drawScreenBackground();drawModes()}else if(state==='universe'){drawScreenBackground();drawUniverse()}else if(state==='entrance'){drawEntrance()}else if(['match','pin','submission'].includes(state)){drawMatch();if(state==='pin')drawPinOverlay();if(state==='submission')drawSubOverlay()}else if(state==='paused'){drawMatch();drawPause()}else if(['win','lose','draw'].includes(state)){drawResult()}}
+function pollGamepad(){
+ controller.connected=false;controller.moveX=0;controller.moveY=0;controller.jumpPressed=false;controller.quickPressed=false;controller.heavyPressed=false;controller.grapplePressed=false;controller.pinPressed=false;controller.weaponPressed=false;controller.finisherPressed=false;controller.kickPressed=false;controller.submit=false;controller.whipPressed=false;controller.climbPressed=false;controller.exitPressed=false;controller.tagPressed=false;controller.kickAttackPressed=false;
+ if(!navigator.getGamepads)return;const pads=navigator.getGamepads();let gp=null;for(const p of pads){if(p&&p.connected){gp=p;break}}if(!gp)return;controller.connected=true;
+ const axis=(v)=>Math.abs(v||0)>.24?v:0;controller.moveX=axis(gp.axes?.[0]||0);controller.moveY=axis(gp.axes?.[1]||0);
+ const pressed=i=>!!gp.buttons?.[i]?.pressed;const edge=i=>pressed(i)&&!gamepadPrev[i];
+ if(pressed(14))controller.moveX=-1;if(pressed(15))controller.moveX=1;if(pressed(12))controller.moveY=-1;if(pressed(13))controller.moveY=1;
+ controller.jumpPressed=edge(0);controller.quickPressed=edge(2);controller.heavyPressed=edge(3);controller.grapplePressed=edge(1);controller.pinPressed=edge(4);controller.weaponPressed=edge(5);controller.submit=pressed(6);controller.finisherPressed=edge(7);controller.kickAttackPressed=edge(8);controller.whipPressed=edge(10);controller.tagPressed=edge(9);controller.climbPressed=edge(11);controller.exitPressed=edge(12);controller.kickPressed=edge(0)||edge(2)||edge(1);
+ gamepadPrev=[];for(let i=0;i<(gp.buttons?.length||0);i++)gamepadPrev[i]=pressed(i);
+}
+function tick(ts){let dt=lastTs?clamp((ts-lastTs)/16.666,0,2.5):1;lastTs=ts;frame+=dt;pollGamepad();updateHealthDisplay(player,dt);updateHealthDisplay(enemy,dt);if(state==='entrance'){
+ entranceTimer-=dt;
+ if(entranceTimer>110){const t=clamp((220-entranceTimer)/110,0,1);if(player){player.x=460+(420-460)*t;player.y=615+(410-615)*t;player.inRing=t>.98;player.moveAmount=.95;player.walk+=dt*2.2}if(enemy){enemy.x=820;enemy.y=615;enemy.inRing=false;enemy.moveAmount=.05}}
+ else{const t=clamp((110-entranceTimer)/110,0,1);if(player){player.x=420;player.y=410;player.inRing=true;player.moveAmount=.05;player.face=1}if(enemy){enemy.x=820+(860-820)*t;enemy.y=615+(410-615)*t;enemy.inRing=t>.98;enemy.moveAmount=.95;enemy.walk+=dt*2.2}}
+ if(entranceTimer<=110&&entranceTimer+dt>110){setNotice('THE MAIN EVENT STARTS NOW!',90);sfx(400,.3,.08,'triangle')}
+ if(entranceTimer<=0){if(player){player.x=420;player.y=410;player.inRing=true;player.moveAmount=0;player.face=1}if(enemy){enemy.x=860;enemy.y=410;enemy.inRing=true;enemy.moveAmount=0;enemy.face=-1}state='match';roundIntro=45;setNotice('BELL RINGS! FIGHT!',75);sfx(90,.45,.12,'sawtooth')}
+}else if(state==='match'){updateMatch(dt)}else if(state==='pin'){updatePin(dt)}else if(state==='submission'){updateSubmission(dt)}render();requestAnimationFrame(tick)}
+function canvasCoords(e){const r=canvas.getBoundingClientRect();return{x:(e.clientX-r.left)*W/r.width,y:(e.clientY-r.top)*H/r.height}}
+canvas.addEventListener('pointermove',e=>{mouse=canvasCoords(e);if(touchStickPointers.has(e.pointerId))updateTouchJoystick(e.pointerId,mouse)});
+canvas.addEventListener('contextmenu',e=>e.preventDefault());
+canvas.addEventListener('pointerdown',e=>{activePointerId=e.pointerId;try{canvas.setPointerCapture(e.pointerId)}catch(_){}mouse=canvasCoords(e);canvas.focus?.();
+ if(touchControlsEnabled&&state==='match'&&Math.hypot(mouse.x-108,mouse.y-678)<=78){updateTouchJoystick(e.pointerId,mouse);return}
+ if(state==='arenas'){const page=Math.floor(arenaCursor/15),start=page*15;for(let j=0;j<15;j++){const i=start+j;if(i>=arenaList.length)break;const x=486+(j%3)*249,y=184+Math.floor(j/3)*80;if(mouse.x>=x&&mouse.x<=x+239&&mouse.y>=y&&mouse.y<=y+72){arenaCursor=i;return}}}if(state==='select'){const startIndex=Math.floor(rosterCursor/12)*12,cardW=195,cardH=95,gapX=9,startX=28,startY=434,rowGap=101;for(let j=0;j<12;j++){let i=startIndex+j;if(i>=roster.length)break;let x=startX+(j%6)*(cardW+gapX),y=startY+Math.floor(j/6)*rowGap;if(mouse.x>=x&&mouse.x<=x+cardW&&mouse.y>=y&&mouse.y<=y+cardH){rosterCursor=i;return}}}for(let b of buttons){if(mouse.x>=b.x&&mouse.x<=b.x+b.w&&mouse.y>=b.y&&mouse.y<=b.y+b.h){b.action();return}}});
+function releaseVirtualKeys(e=null){
+ if(!e){for(const k of virtualKeys)keys[k]=false;virtualKeys.clear();virtualKeysByPointer.clear();touchStickPointers.clear();touchStickPosition=null;activePointerId=null;return}
+ const id=e.pointerId;touchStickPointers.delete(id);touchStickPosition=touchStickPointers.size?Array.from(touchStickPointers.values()).pop():null;
+ const owned=virtualKeysByPointer.get(id);
+ if(owned){virtualKeysByPointer.delete(id);for(const code of owned){let stillHeld=false;for(const set of virtualKeysByPointer.values()){if(set.has(code)){stillHeld=true;break}}if(!stillHeld){keys[code]=false;virtualKeys.delete(code)}}}
+ if(activePointerId===id)activePointerId=null;
+}
+window.addEventListener('pointerup',e=>releaseVirtualKeys(e));window.addEventListener('pointercancel',e=>releaseVirtualKeys(e));
+window.addEventListener('keydown',e=>{let code=e.code;if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space','NumpadMultiply','NumpadAdd','NumpadSubtract'].includes(code))e.preventDefault();if(code==='Escape'){if(state==='playModes'){state='menu'}else if(state==='match'){state='paused';pausedFrom='match'}else if(state==='paused')state=pausedFrom;else if(state==='settings'){state=settingsReturnState;}else if(state==='help'){state=pausedFrom==='devices'?'devices':pausedFrom==='settings'?'settings':'menu';}else if(state==='arenas'){leaveArenaSelection()}else if(state==='select'||state==='devices'){state='menu';stopCrowdChants()}else if(state==='universe')state='modes';else if(state==='modes')state='menu';return}keys[code]=true;
+ if(state==='settings'){
+  const settingsCount=Math.max(1,buttons.length);
+  if(code==='ArrowUp'||code==='ArrowLeft'||code==='KeyW'||code==='KeyA')settingsCursor=(settingsCursor+settingsCount-1)%settingsCount;
+  if(code==='ArrowDown'||code==='ArrowRight'||code==='KeyS'||code==='KeyD')settingsCursor=(settingsCursor+1)%settingsCount;
+  if(code==='Enter'||code==='Space'){const item=buttons[settingsCursor];if(item)item.action()}
+ }
+ if(state==='menu'){
+  if(code==='ArrowUp'||code==='KeyW')menuIndex=(menuIndex+7)%8;
+  if(code==='ArrowDown'||code==='KeyS')menuIndex=(menuIndex+1)%8;
+  if(code==='Enter'||code==='Space'){const items=mainMenuItems();if(items[menuIndex])items[menuIndex][1]()}
+ }
+ if(state==='arenas'){
+  if(code==='ArrowLeft'||code==='KeyA')arenaCursor=Math.max(0,arenaCursor-1);
+  if(code==='ArrowRight'||code==='KeyD')arenaCursor=Math.min(arenaList.length-1,arenaCursor+1);
+  if(code==='ArrowUp')arenaCursor=Math.max(0,arenaCursor-3);
+  if(code==='ArrowDown')arenaCursor=Math.min(arenaList.length-1,arenaCursor+3);
+  if(code==='PageUp')arenaCursor=Math.max(0,Math.floor(arenaCursor/15)*15-15);
+  if(code==='PageDown')arenaCursor=Math.min(arenaList.length-1,(Math.floor(arenaCursor/15)+1)*15);
+  if(code==='Enter'||code==='Space')acceptArenaSelection();
+ }
+ if(state==='select'){
+  if(code==='ArrowLeft'||code==='KeyA')rosterCursor=(rosterCursor+roster.length-1)%roster.length;
+  if(code==='ArrowRight'||code==='KeyD')rosterCursor=(rosterCursor+1)%roster.length;
+  if(code==='ArrowUp')rosterCursor=Math.max(0,rosterCursor-6);
+  if(code==='ArrowDown')rosterCursor=Math.min(roster.length-1,rosterCursor+6);
+  if(code==='PageUp')rosterCursor=Math.max(0,rosterCursor-12);
+  if(code==='PageDown')rosterCursor=Math.min(roster.length-1,rosterCursor+12);
+  if(code==='KeyM')matchTypeIndex=(matchTypeIndex+1)%matchTypes.length;
+  if(code==='Enter'||code==='Space')advanceRosterSelection();
+ }
+});window.addEventListener('keyup',e=>{keys[e.code]=false});
+// If a key is held, only trigger attacks once per keydown to prevent rapid accidental repeats.
+window.addEventListener('keydown',e=>{if(e.repeat&&['KeyJ','KeyK','KeyE','KeyP','KeyH','KeyG'].includes(e.code))e.preventDefault()});
+// Accessible quick restart and browser sound start.
+window.addEventListener('blur',()=>{keys={};releaseVirtualKeys()});
+window.addEventListener('gamepadconnected',()=>setNotice('USB CONTROLLER CONNECTED!',80));
+requestAnimationFrame(tick);
+})();
+</script>
+
+<script>
+// PWA offline support; service workers require HTTPS or localhost.
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+}
+</script>
+</body>
+</html>
